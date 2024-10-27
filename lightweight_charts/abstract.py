@@ -800,7 +800,7 @@ class AbstractChart(Candlestick, Pane):
         self._height = height
         self.events: Events = Events(self)
 
-        from .polygon import PolygonAPI
+        from lightweight_charts.polygon import PolygonAPI
         self.polygon: PolygonAPI = PolygonAPI(self)
 
         self.run_script(
@@ -843,8 +843,9 @@ class AbstractChart(Candlestick, Pane):
     
     def create_area(
             self, name: str = '', top_color: str ='rgba(0, 100, 0, 0.5)',
-            bottom_color: str ='rgba(138, 3, 3, 0.5)',invert: bool = False,  color: str ='rgba(0,0,255,1)', style: LINE_STYLE = 'solid', width: int = 2, 
-            price_line: bool = True, price_label: bool = True, price_scale_id: Optional[str] = None
+            bottom_color: str ='rgba(138, 3, 3, 0.5)',invert: bool = False,  color: str ='rgba(0,0,255,1)',
+            style: LINE_STYLE = 'solid', width: int = 2, price_line: bool = True, price_label: bool = True, 
+            price_scale_id: Optional[str] = None
     ) -> Area:
         """
         Creates and returns an Area object.
