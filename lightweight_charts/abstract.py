@@ -531,10 +531,10 @@ class Histogram(SeriesCommon):
 
 
 class Area(SeriesCommon):
-    def __init__(self, chart, name, top_color, bottom_color, invert = False, color = '#FFFFFF', style='solid', width=1, price_line=False, price_label=False, price_scale_id=None, crosshair_marker=True):
+    def __init__(self, chart, name, top_color, bottom_color, invert = False, line_color = '#FFFFFF', style='solid', width=1, price_line=True, price_label=False, price_scale_id=None, crosshair_marker=True):
 
         super().__init__(chart, name)
-        self.color = color
+        self.color = line_color
         self.topColor = top_color
         self.bottomColor = bottom_color
 
@@ -545,7 +545,8 @@ class Area(SeriesCommon):
                     topColor: '{top_color}',
                     bottomColor: '{bottom_color}',
                     invertFilledArea: {jbool(invert)},
-                    color: '{color}',
+                    color: '{line_color}',
+                    lineColor: '{line_color}',
                     lineStyle: {as_enum(style, LINE_STYLE)},
                     lineWidth: {width},
                     lastValueVisible: {jbool(price_label)},
@@ -579,7 +580,54 @@ class Area(SeriesCommon):
             delete {self.id}legendItem
             delete {self.id}
         ''')
-        
+class Bar(SeriesCommon):
+    def __init__(self, chart, name, up_color='#26a69a', down_color='#ef5350', open_visible=True, thin_bars=True, price_line=True, price_label=False, price_scale_id=None):
+        super().__init__(chart, name)
+        self.up_color = up_color
+        self.down_color = down_color
+
+        self.run_script(f'''
+        {self.id} = {chart.id}.createBarSeries(
+            "{name}",
+            {{
+                color: '{up_color}',
+                upColor: '{up_color}',
+                downColor: '{down_color}',
+                openVisible: {jbool(open_visible)},
+                thinBars: {jbool(thin_bars)},
+                lastValueVisible: {jbool(price_label)},
+                priceLineVisible: {jbool(price_line)},
+                priceScaleId: {f'"{price_scale_id}"' if price_scale_id else 'undefined'}
+            }}
+        )''')
+    def set(self, df: Optional[pd.DataFrame] = None):
+        if df is None or df.empty:
+            self.run_script(f'{self.id}.series.setData([])')
+            self.candle_data = pd.DataFrame()
+            return
+        df = self._df_datetime_format(df)
+        self.data = df.copy()
+        self._last_bar = df.iloc[-1]
+        self.run_script(f'{self.id}.series.setData({js_data(df)})')
+
+
+    def delete(self):
+        """
+        Irreversibly deletes the bar series.
+        """
+        self.run_script(f'''
+            {self.id}legendItem = {self._chart.id}.legend._lines.find((line) => line.series == {self.id}.series)
+            {self._chart.id}.legend._lines = {self._chart.id}.legend._lines.filter((item) => item != {self.id}legendItem)
+
+            if ({self.id}legendItem) {{
+                {self._chart.id}.legend.div.removeChild({self.id}legendItem.row)
+            }}
+
+            {self._chart.id}.chart.removeSeries({self.id}.series)
+            delete {self.id}legendItem
+            delete {self.id}
+        ''')
+
 class Candlestick(SeriesCommon):
     def __init__(self, chart: 'AbstractChart'):
         super().__init__(chart)
@@ -792,18 +840,33 @@ class AbstractChart(Candlestick, Pane):
         return Histogram(
             self, name, color, price_line, price_label,
             scale_margin_top, scale_margin_bottom)
+    
     def create_area(
             self, name: str = '', top_color: str ='rgba(0, 100, 0, 0.5)',
-            bottom_color: str ='rgba(138, 3, 3, 0.5)',invert: bool = False,  color: str ='#FFFFFF', style: LINE_STYLE = 'solid', width: int = 2, 
+            bottom_color: str ='rgba(138, 3, 3, 0.5)',invert: bool = False,  color: str ='rgba(0,0,255,1)', style: LINE_STYLE = 'solid', width: int = 2, 
             price_line: bool = True, price_label: bool = True, price_scale_id: Optional[str] = None
     ) -> Area:
         """
         Creates and returns an Area object.
         """
-        return Area(self, name, top_color, bottom_color, invert, color, style,
-                                width, price_line, price_label, price_scale_id) 
+        self._lines.append(Area(self, name, top_color, bottom_color, invert, color, style,
+                                width, price_line, price_label, price_scale_id))
     
-    
+        return self._lines[-1]
+    def create_bar(
+            self, name: str = '', up_color: str = '#26a69a', down_color: str = '#ef5350',
+            open_visible: bool = True, thin_bars: bool = True,
+            price_line: bool = True, price_label: bool = True,
+            price_scale_id: Optional[str] = None
+        ) -> Bar:
+        """
+        Creates and returns a Bar object.
+        """
+        return Bar(
+            self, name, up_color, down_color, open_visible, thin_bars,
+            price_line, price_label, price_scale_id)
+        
+       
     def lines(self) -> List[Line]:
         """
         Returns all lines for the chart.
