@@ -529,6 +529,57 @@ class Histogram(SeriesCommon):
         }})''')
 
 
+
+class Area(SeriesCommon):
+    def __init__(self, chart, name, top_color, bottom_color, invert = False, color = '#FFFFFF', style='solid', width=1, price_line=False, price_label=False, price_scale_id=None, crosshair_marker=True):
+
+        super().__init__(chart, name)
+        self.color = color
+        self.topColor = top_color
+        self.bottomColor = bottom_color
+
+        self.run_script(f'''
+            {self.id} = {self._chart.id}.createAreaSeries(
+                "{name}",
+                {{
+                    topColor: '{top_color}',
+                    bottomColor: '{bottom_color}',
+                    invertFilledArea: {jbool(invert)},
+                    color: '{color}',
+                    lineStyle: {as_enum(style, LINE_STYLE)},
+                    lineWidth: {width},
+                    lastValueVisible: {jbool(price_label)},
+                    priceLineVisible: {jbool(price_line)},
+                    crosshairMarkerVisible: {jbool(crosshair_marker)},
+                    priceScaleId: {f'"{price_scale_id}"' if price_scale_id else 'undefined'}
+                    {"""autoscaleInfoProvider: () => ({
+                            priceRange: {
+                                minValue: 1_000_000_000,
+                                maxValue: 0,
+                            },
+                        }),
+                    """ if chart._scale_candles_only else ''}
+                }}
+            )
+        null''')
+    def delete(self):
+        """
+        Irreversibly deletes the line, as well as the object that contains the line.
+        """
+        self._chart._lines.remove(self) if self in self._chart._lines else None
+        self.run_script(f'''
+            {self.id}legendItem = {self._chart.id}.legend._lines.find((line) => line.series == {self.id}.series)
+            {self._chart.id}.legend._lines = {self._chart.id}.legend._lines.filter((item) => item != {self.id}legendItem)
+
+            if ({self.id}legendItem) {{
+                {self._chart.id}.legend.div.removeChild({self.id}legendItem.row)
+            }}
+
+            {self._chart.id}.chart.removeSeries({self.id}.series)
+            delete {self.id}legendItem
+            delete {self.id}
+        ''')
+        
 class Candlestick(SeriesCommon):
     def __init__(self, chart: 'AbstractChart'):
         super().__init__(chart)
@@ -701,7 +752,7 @@ class AbstractChart(Candlestick, Pane):
         self._height = height
         self.events: Events = Events(self)
 
-        from lightweight_charts.polygon import PolygonAPI
+        from .polygon import PolygonAPI
         self.polygon: PolygonAPI = PolygonAPI(self)
 
         self.run_script(
@@ -741,7 +792,18 @@ class AbstractChart(Candlestick, Pane):
         return Histogram(
             self, name, color, price_line, price_label,
             scale_margin_top, scale_margin_bottom)
-
+    def create_area(
+            self, name: str = '', top_color: str ='rgba(0, 100, 0, 0.5)',
+            bottom_color: str ='rgba(138, 3, 3, 0.5)',invert: bool = False,  color: str ='#FFFFFF', style: LINE_STYLE = 'solid', width: int = 2, 
+            price_line: bool = True, price_label: bool = True, price_scale_id: Optional[str] = None
+    ) -> Area:
+        """
+        Creates and returns an Area object.
+        """
+        return Area(self, name, top_color, bottom_color, invert, color, style,
+                                width, price_line, price_label, price_scale_id) 
+    
+    
     def lines(self) -> List[Line]:
         """
         Returns all lines for the chart.
