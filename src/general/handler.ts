@@ -3,6 +3,7 @@ import {
     CrosshairMode,
     DeepPartial,
     HistogramStyleOptions,
+    AreaStyleOptions,
     IChartApi,
     ISeriesApi,
     LineStyleOptions,
@@ -196,7 +197,15 @@ export class Handler {
             series: line,
         }
     }
-
+    createAreaSeries(name: string, options: DeepPartial<AreaStyleOptions & SeriesOptionsCommon>) {
+        const line = this.chart.addAreaSeries({ ...options });
+        this._seriesList.push(line);
+        this.legend.makeSeriesRow(name, line);
+        return {
+            name: name,
+            series: line,
+        };
+    }
     createToolBox() {
         this.toolBox = new ToolBox(this.id, this.chart, this.series, this.commandFunctions);
         this.div.appendChild(this.toolBox.div);
