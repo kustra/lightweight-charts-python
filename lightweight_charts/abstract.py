@@ -580,6 +580,7 @@ class Area(SeriesCommon):
             delete {self.id}legendItem
             delete {self.id}
         ''')
+
 class Bar(SeriesCommon):
     def __init__(self, chart, name, up_color='#26a69a', down_color='#ef5350', open_visible=True, thin_bars=True, price_line=True, price_label=False, price_scale_id=None):
         super().__init__(chart, name)
@@ -610,7 +611,20 @@ class Bar(SeriesCommon):
         self._last_bar = df.iloc[-1]
         self.run_script(f'{self.id}.series.setData({js_data(df)})')
 
+    def update(self, series: pd.Series, _from_tick=False):
+        """
+        Updates the data from a bar;
+        if series['time'] is the same time as the last bar, the last bar will be overwritten.\n
+        :param series: labels: date/time, open, high, low, close, volume (if using volume).
+        """
+        series = self._series_datetime_format(series) if not _from_tick else series
+        if series['time'] != self._last_bar['time']:
+            self.data.loc[self.data.index[-1]] = self._last_bar
+            self.data = pd.concat([self.data, series.to_frame().T], ignore_index=True)
+            self._chart.events.new_bar._emit(self)
 
+        self._last_bar = series
+        self.run_script(f'{self.id}.series.update({js_data(series)})')
     def delete(self):
         """
         Irreversibly deletes the bar series.
