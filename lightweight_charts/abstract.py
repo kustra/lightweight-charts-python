@@ -423,16 +423,19 @@ class SeriesCommon(Pane):
         return VerticalSpan(self, start_time, end_time, color)
 
 
-class Line(SeriesCommon):
-    def __init__(self, chart, name, color, style, width, price_line, price_label, price_scale_id=None, crosshair_marker=True):
 
+class Line(SeriesCommon):
+    def __init__(self, chart, name, color, style, width, price_line, price_label, group, price_scale_id=None, crosshair_marker=True):
         super().__init__(chart, name)
         self.color = color
+        self.group = group  # Store group for potential internal use
 
+        # Pass group as part of the options if createLineSeries handles removing it
         self.run_script(f'''
             {self.id} = {self._chart.id}.createLineSeries(
                 "{name}",
                 {{
+                    group:  '{group}',
                     color: '{color}',
                     lineStyle: {as_enum(style, LINE_STYLE)},
                     lineWidth: {width},
@@ -832,16 +835,18 @@ class AbstractChart(Candlestick, Pane):
         """
         self.run_script(f'{self.id}.chart.timeScale().fitContent()')
 
-    def create_line(
+  def create_line(
             self, name: str = '', color: str = 'rgba(214, 237, 255, 0.6)',
             style: LINE_STYLE = 'solid', width: int = 2,
-            price_line: bool = True, price_label: bool = True, price_scale_id: Optional[str] = None
+            price_line: bool = True, price_label: bool = True, group: str = '',
+            price_scale_id: Optional[str] =None
     ) -> Line:
         """
         Creates and returns a Line object.
         """
-        self._lines.append(Line(self, name, color, style, width, price_line, price_label, price_scale_id))
+        self._lines.append(Line(self, name, color, style, width, price_line, price_label, group, price_scale_id ))
         return self._lines[-1]
+
 
     def create_histogram(
             self, name: str = '', color: str = 'rgba(214, 237, 255, 0.6)',
@@ -854,6 +859,7 @@ class AbstractChart(Candlestick, Pane):
         return Histogram(
             self, name, color, price_line, price_label,
             scale_margin_top, scale_margin_bottom)
+
     
     def create_area(
             self, name: str = '', top_color: str ='rgba(0, 100, 0, 0.5)',
@@ -868,6 +874,8 @@ class AbstractChart(Candlestick, Pane):
                                 width, price_line, price_label, price_scale_id))
     
         return self._lines[-1]
+
+        
     def create_bar(
             self, name: str = '', up_color: str = '#26a69a', down_color: str = '#ef5350',
             open_visible: bool = True, thin_bars: bool = True,

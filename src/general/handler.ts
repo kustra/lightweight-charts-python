@@ -29,7 +29,9 @@ export interface Scale{
     height: number,
 }
 
-
+interface MultiLineOptions extends DeepPartial<LineStyleOptions & SeriesOptionsCommon> {
+    group?: string; // Define group as an optional string identifier
+}
 globalParamInit();
 declare const window: GlobalParams;
 
@@ -179,16 +181,40 @@ export class Handler {
         return volumeSeries;
     }
 
-    createLineSeries(name: string, options: DeepPartial<LineStyleOptions & SeriesOptionsCommon>) {
-        const line = this.chart.addLineSeries({...options});
+   createLineSeries(
+        name: string,
+        options: MultiLineOptions
+    ): { name: string; series: ISeriesApi<SeriesType> } {
+        const { group, ...lineOptions } = options;
+        const line = this.chart.addLineSeries(lineOptions);
         this._seriesList.push(line);
-        this.legend.makeSeriesRow(name, line)
-        return {
-            name: name,
-            series: line,
+    
+        // Get color of the series for legend display
+        const color = line.options().color || 'rgba(255,0,0,1)'; // Default to red if no color is defined
+        const solidColor = color.startsWith('rgba') ? color.replace(/[^,]+(?=\))/, '1') : color;
+    
+        if (!group || group === '') {
+            // No group: create a standalone series row
+            this.legend.makeSeriesRow(name, line);
+        } else {
+            // Check if the group already exists
+            const existingGroup = this.legend._groups.find(g => g.name === group);
+    
+            if (existingGroup) {
+                // Group exists: add the new line's name and color to the `names` and `solidColors` arrays
+                existingGroup.names.push(name);
+                existingGroup.seriesList.push(line);
+                existingGroup.solidColors.push(solidColor);
+            } else {
+                // Group does not exist: create a new one
+                this.legend.makeSeriesGroup(group, [name], [line], [solidColor]);
+            }
         }
+    
+        return { name, series: line };
     }
-
+    
+    
     createHistogramSeries(name: string, options: DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>) {
         const line = this.chart.addHistogramSeries({...options});
         this._seriesList.push(line);
