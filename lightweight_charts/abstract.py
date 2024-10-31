@@ -423,25 +423,28 @@ class SeriesCommon(Pane):
         return VerticalSpan(self, start_time, end_time, color)
 
 
-
 class Line(SeriesCommon):
-    def __init__(self, chart, name, color, style, width, price_line, price_label, group, price_scale_id=None, crosshair_marker=True):
+    def __init__(
+            self, chart, name, color, style, width, price_line, price_label, 
+            group, legend_symbol, price_scale_id, crosshair_marker=True):
         super().__init__(chart, name)
         self.color = color
-        self.group = group  # Store group for potential internal use
+        self.group = group  # Store group for legend grouping
+        self.legend_symbol = legend_symbol  # Store the legend symbol
 
-        # Pass group as part of the options if createLineSeries handles removing it
+        # Initialize series with configuration options
         self.run_script(f'''
             {self.id} = {self._chart.id}.createLineSeries(
                 "{name}",
                 {{
-                    group:  '{group}',
+                    group: '{group}',
                     color: '{color}',
                     lineStyle: {as_enum(style, LINE_STYLE)},
                     lineWidth: {width},
                     lastValueVisible: {jbool(price_label)},
                     priceLineVisible: {jbool(price_line)},
                     crosshairMarkerVisible: {jbool(crosshair_marker)},
+                    legendSymbol: '{legend_symbol}',
                     priceScaleId: {f'"{price_scale_id}"' if price_scale_id else 'undefined'}
                     {"""autoscaleInfoProvider: () => ({
                             priceRange: {
@@ -453,8 +456,6 @@ class Line(SeriesCommon):
                 }}
             )
         null''')
-
-    # def _set_trend(self, start_time, start_value, end_time, end_value, ray=False, round=False):
     #     if round:
     #         start_time = self._single_datetime_format(start_time)
     #         end_time = self._single_datetime_format(end_time)
@@ -489,18 +490,24 @@ class Line(SeriesCommon):
 
 
 class Histogram(SeriesCommon):
-    def __init__(self, chart, name, color, price_line, price_label, scale_margin_top, scale_margin_bottom):
+    def __init__(
+            self, chart, name, color, price_line, price_label, group, legend_symbol, scale_margin_top, scale_margin_bottom):
         super().__init__(chart, name)
         self.color = color
+        self.group = group  # Store group for legend grouping
+        self.legend_symbol = legend_symbol  # Store legend symbol
+
         self.run_script(f'''
         {self.id} = {chart.id}.createHistogramSeries(
             "{name}",
             {{
+                group: '{group}',
                 color: '{color}',
                 lastValueVisible: {jbool(price_label)},
                 priceLineVisible: {jbool(price_line)},
+                legendSymbol: '{legend_symbol}',
                 priceScaleId: '{self.id}',
-                priceFormat: {{type: "volume"}},
+                priceFormat: {{type: "volume"}}
             }},
             // precision: 2,
         )
@@ -534,17 +541,21 @@ class Histogram(SeriesCommon):
 
 
 class Area(SeriesCommon):
-    def __init__(self, chart, name, top_color, bottom_color, invert = False, line_color = '#FFFFFF', style='solid', width=1, price_line=True, price_label=False, price_scale_id=None, crosshair_marker=True):
-
-        super().__init__(chart, name)
+    def __init__(
+            self, chart, name, top_color, bottom_color, invert, line_color,
+            style, width, price_line, price_label, group, legend_symbol, price_scale_id, crosshair_marker=True):
+        super().__init__(chart, name) 
         self.color = line_color
         self.topColor = top_color
         self.bottomColor = bottom_color
+        self.group = group  # Store group for legend grouping
+        self.legend_symbol = legend_symbol  # Store legend symbol
 
         self.run_script(f'''
             {self.id} = {self._chart.id}.createAreaSeries(
                 "{name}",
                 {{
+                    group: '{group}',
                     topColor: '{top_color}',
                     bottomColor: '{bottom_color}',
                     invertFilledArea: {jbool(invert)},
@@ -555,6 +566,7 @@ class Area(SeriesCommon):
                     lastValueVisible: {jbool(price_label)},
                     priceLineVisible: {jbool(price_line)},
                     crosshairMarkerVisible: {jbool(crosshair_marker)},
+                    legendSymbol: '{legend_symbol}',
                     priceScaleId: {f'"{price_scale_id}"' if price_scale_id else 'undefined'}
                     {"""autoscaleInfoProvider: () => ({
                             priceRange: {
@@ -584,16 +596,22 @@ class Area(SeriesCommon):
             delete {self.id}
         ''')
 
+
 class Bar(SeriesCommon):
-    def __init__(self, chart, name, up_color='#26a69a', down_color='#ef5350', open_visible=True, thin_bars=True, price_line=True, price_label=False, price_scale_id=None):
+    def __init__(
+            self, chart, name, up_color, down_color, open_visible, thin_bars,
+            price_line, price_label, group, legend_symbol, price_scale_id):
         super().__init__(chart, name)
         self.up_color = up_color
         self.down_color = down_color
+        self.group = group  # Store group for legend grouping
+        self.legend_symbol = legend_symbol if isinstance(legend_symbol, list) else [legend_symbol, legend_symbol]  # Store legend symbols
 
         self.run_script(f'''
         {self.id} = {chart.id}.createBarSeries(
             "{name}",
             {{
+                group: '{group}',
                 color: '{up_color}',
                 upColor: '{up_color}',
                 downColor: '{down_color}',
@@ -601,8 +619,10 @@ class Bar(SeriesCommon):
                 thinBars: {jbool(thin_bars)},
                 lastValueVisible: {jbool(price_label)},
                 priceLineVisible: {jbool(price_line)},
+                legendSymbol: {json.dumps(self.legend_symbol)},
                 priceScaleId: {f'"{price_scale_id}"' if price_scale_id else 'undefined'}
             }}
+            
         )''')
     def set(self, df: Optional[pd.DataFrame] = None):
         if df is None or df.empty:
@@ -644,6 +664,7 @@ class Bar(SeriesCommon):
             delete {self.id}legendItem
             delete {self.id}
         ''')
+        
 
 class Candlestick(SeriesCommon):
     def __init__(self, chart: 'AbstractChart'):
@@ -835,59 +856,117 @@ class AbstractChart(Candlestick, Pane):
         """
         self.run_script(f'{self.id}.chart.timeScale().fitContent()')
 
-  def create_line(
-            self, name: str = '', color: str = 'rgba(214, 237, 255, 0.6)',
-            style: LINE_STYLE = 'solid', width: int = 2,
-            price_line: bool = True, price_label: bool = True, group: str = '',
-            price_scale_id: Optional[str] =None
-    ) -> Line:
+    def create_line(
+            self, 
+            name: str = '', 
+            color: str = 'rgba(214, 237, 255, 0.6)',
+            style: LINE_STYLE = 'solid', 
+            width: int = 2,
+            price_line: bool = True, 
+            price_label: bool = True, 
+            group: str = '',
+            legend_symbol: str = '', 
+            price_scale_id: Optional[str] = None
+        ) -> Line:
         """
         Creates and returns a Line object.
         """
-        self._lines.append(Line(self, name, color, style, width, price_line, price_label, group, price_scale_id ))
+        
+        symbol_styles = {
+            'solid':'―',
+            'dotted':'··',
+            'dashed':'--',
+            'large_dashed':'- -',
+            'sparse_dotted':"· ·",
+        }
+        if legend_symbol == '':
+            legend_symbol = symbol_styles.get(style, '━')  # Default to 'solid' if style is unrecognized
+
+        if not isinstance(legend_symbol, str):
+            raise TypeError("legend_symbol must be a string for Line series.")
+        
+        self._lines.append(Line(
+            self, name, color, style, width, price_line, price_label, 
+            group, legend_symbol, price_scale_id
+        ))
         return self._lines[-1]
 
-
     def create_histogram(
-            self, name: str = '', color: str = 'rgba(214, 237, 255, 0.6)',
-            price_line: bool = True, price_label: bool = True,
-            scale_margin_top: float = 0.0, scale_margin_bottom: float = 0.0
-    ) -> Histogram:
+            self, 
+            name: str = '', 
+            color: str = 'rgba(214, 237, 255, 0.6)',
+            price_line: bool = True, 
+            price_label: bool = True,
+            group: str = '', 
+            legend_symbol: str = '▥',
+            scale_margin_top: float = 0.0, 
+            scale_margin_bottom: float = 0.0
+        ) -> Histogram:
         """
         Creates and returns a Histogram object.
         """
+        if not isinstance(legend_symbol, str):
+            raise TypeError("legend_symbol must be a string for Histogram series.")
+        
         return Histogram(
-            self, name, color, price_line, price_label,
-            scale_margin_top, scale_margin_bottom)
+            self, name, color, price_line, price_label, 
+            group, legend_symbol, scale_margin_top, scale_margin_bottom
+        )
 
-    
     def create_area(
-            self, name: str = '', top_color: str ='rgba(0, 100, 0, 0.5)',
-            bottom_color: str ='rgba(138, 3, 3, 0.5)',invert: bool = False,  color: str ='rgba(0,0,255,1)',
-            style: LINE_STYLE = 'solid', width: int = 2, price_line: bool = True, price_label: bool = True, 
+            self, 
+            name: str = '', 
+            top_color: str = 'rgba(0, 100, 0, 0.5)',
+            bottom_color: str = 'rgba(138, 3, 3, 0.5)', 
+            invert: bool = False, 
+            color: str = 'rgba(0,0,255,1)', 
+            style: LINE_STYLE = 'solid',
+            width: int = 2, 
+            price_line: bool = True, 
+            price_label: bool = True, 
+            group: str = '', 
+            legend_symbol: str = '◪', 
             price_scale_id: Optional[str] = None
-    ) -> Area:
+        ) -> Area:
         """
         Creates and returns an Area object.
         """
-        self._lines.append(Area(self, name, top_color, bottom_color, invert, color, style,
-                                width, price_line, price_label, price_scale_id))
-    
+        if not isinstance(legend_symbol, str):
+            raise TypeError("legend_symbol must be a string for Area series.")
+        
+        self._lines.append(Area(
+            self, name, top_color, bottom_color, invert, color, style, 
+            width, price_line, price_label, group, legend_symbol, price_scale_id
+        ))
         return self._lines[-1]
 
-        
     def create_bar(
-            self, name: str = '', up_color: str = '#26a69a', down_color: str = '#ef5350',
-            open_visible: bool = True, thin_bars: bool = True,
-            price_line: bool = True, price_label: bool = True,
+            self, 
+            name: str = '', 
+            up_color: str = '#26a69a', 
+            down_color: str = '#ef5350',
+            open_visible: bool = True, 
+            thin_bars: bool = True,
+            price_line: bool = True, 
+            price_label: bool = True,
+            group: str = '', 
+            legend_symbol: Union[str, List[str]] = ['┌', '└'],
             price_scale_id: Optional[str] = None
         ) -> Bar:
         """
         Creates and returns a Bar object.
         """
+        if not isinstance(legend_symbol, (str, list)):
+            raise TypeError("legend_symbol must be a string or list of strings for Bar series.")
+        if isinstance(legend_symbol, list) and not all(isinstance(symbol, str) for symbol in legend_symbol):
+            raise TypeError("Each item in legend_symbol list must be a string for Bar series.")
+        
         return Bar(
-            self, name, up_color, down_color, open_visible, thin_bars,
-            price_line, price_label, price_scale_id)
+            self, name, up_color, down_color, open_visible, thin_bars, 
+            price_line, price_label, group, legend_symbol, price_scale_id
+        )
+
+    
         
        
     def lines(self) -> List[Line]:
