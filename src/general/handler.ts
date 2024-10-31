@@ -28,10 +28,28 @@ export interface Scale{
     width: number,
     height: number,
 }
-
-interface MultiLineOptions extends DeepPartial<LineStyleOptions & SeriesOptionsCommon> {
-    group?: string; // Define group as an optional string identifier
+// Define specific options interfaces with optional group and legendSymbol properties
+interface LineSeriesOptions extends DeepPartial<LineStyleOptions & SeriesOptionsCommon> {
+    group?: string;
+    legendSymbol?: string;
 }
+
+interface HistogramSeriesOptions extends DeepPartial<HistogramStyleOptions & SeriesOptionsCommon> {
+    group?: string;
+    legendSymbol?: string;
+}
+
+interface AreaSeriesOptions extends DeepPartial<AreaStyleOptions & SeriesOptionsCommon> {
+    group?: string;
+    legendSymbol?: string;
+}
+
+interface BarSeriesOptions extends DeepPartial<BarStyleOptions & SeriesOptionsCommon> {
+    group?: string;
+    legendSymbol?: string[]; // Updated to an array of strings to support dual symbols
+}
+
+
 globalParamInit();
 declare const window: GlobalParams;
 
@@ -181,70 +199,128 @@ export class Handler {
         return volumeSeries;
     }
 
-   createLineSeries(
+    createLineSeries(
         name: string,
-        options: MultiLineOptions
+        options: LineSeriesOptions
     ): { name: string; series: ISeriesApi<SeriesType> } {
-        const { group, ...lineOptions } = options;
+        const { group, legendSymbol = '▨', ...lineOptions } = options;
         const line = this.chart.addLineSeries(lineOptions);
         this._seriesList.push(line);
     
-        // Get color of the series for legend display
-        const color = line.options().color || 'rgba(255,0,0,1)'; // Default to red if no color is defined
+        const color = line.options().color || 'rgba(255,0,0,1)';
         const solidColor = color.startsWith('rgba') ? color.replace(/[^,]+(?=\))/, '1') : color;
     
         if (!group || group === '') {
-            // No group: create a standalone series row
-            this.legend.makeSeriesRow(name, line);
+            this.legend.makeSeriesRow(name, line, [legendSymbol], [solidColor]);
         } else {
-            // Check if the group already exists
             const existingGroup = this.legend._groups.find(g => g.name === group);
-    
             if (existingGroup) {
-                // Group exists: add the new line's name and color to the `names` and `solidColors` arrays
                 existingGroup.names.push(name);
                 existingGroup.seriesList.push(line);
-                existingGroup.solidColors.push(solidColor);
+                existingGroup.solidColors.push(solidColor); // Single color
+                existingGroup.legendSymbols.push(legendSymbol); // Single symbol
             } else {
-                // Group does not exist: create a new one
-                this.legend.makeSeriesGroup(group, [name], [line], [solidColor]);
+                this.legend.makeSeriesGroup(group, [name], [line], [solidColor], [legendSymbol]);
             }
         }
     
         return { name, series: line };
     }
     
+    createHistogramSeries(
+        name: string,
+        options: HistogramSeriesOptions
+    ): { name: string; series: ISeriesApi<SeriesType> } {
+        const { group, legendSymbol = '▨', ...histogramOptions } = options;
+        const histogram = this.chart.addHistogramSeries(histogramOptions);
+        this._seriesList.push(histogram);
     
-    createHistogramSeries(name: string, options: DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>) {
-        const line = this.chart.addHistogramSeries({...options});
-        this._seriesList.push(line);
-        this.legend.makeSeriesRow(name, line)
-        return {
-            name: name,
-            series: line,
+        const color = histogram.options().color || 'rgba(255,0,0,1)';
+        const solidColor = color.startsWith('rgba') ? color.replace(/[^,]+(?=\))/, '1') : color;
+    
+        if (!group || group === '') {
+            this.legend.makeSeriesRow(name, histogram, [legendSymbol], [solidColor]);
+        } else {
+            const existingGroup = this.legend._groups.find(g => g.name === group);
+            if (existingGroup) {
+                existingGroup.names.push(name);
+                existingGroup.seriesList.push(histogram);
+                existingGroup.solidColors.push(solidColor); // Single color
+                existingGroup.legendSymbols.push(legendSymbol); // Single symbol
+            } else {
+                this.legend.makeSeriesGroup(group, [name], [histogram], [solidColor], [legendSymbol]);
+            }
         }
+    
+        return { name, series: histogram };
     }
-    createAreaSeries(name: string, options: DeepPartial<AreaStyleOptions & SeriesOptionsCommon>) {
-        const line = this.chart.addAreaSeries({ ...options });
-        this._seriesList.push(line);
-        this.legend.makeSeriesRow(name, line);
-        return {
-            name: name,
-            series: line,
-        };
+    
+    createAreaSeries(
+        name: string,
+        options: AreaSeriesOptions
+    ): { name: string; series: ISeriesApi<SeriesType> } {
+        const { group, legendSymbol = '▨', ...areaOptions } = options;
+        const area = this.chart.addAreaSeries(areaOptions);
+        this._seriesList.push(area);
+    
+        const color = area.options().color || 'rgba(255,0,0,1)';
+        const solidColor = color.startsWith('rgba') ? color.replace(/[^,]+(?=\))/, '1') : color;
+    
+        if (!group || group === '') {
+            this.legend.makeSeriesRow(name, area, [legendSymbol], [solidColor]);
+        } else {
+            const existingGroup = this.legend._groups.find(g => g.name === group);
+            if (existingGroup) {
+                existingGroup.names.push(name);
+                existingGroup.seriesList.push(area);
+                existingGroup.solidColors.push(solidColor); // Single color
+                existingGroup.legendSymbols.push(legendSymbol); // Single symbol
+            } else {
+                this.legend.makeSeriesGroup(group, [name], [area], [solidColor], [legendSymbol]);
+            }
+        }
+    
+        return { name, series: area };
     }
-   
-    createBarSeries(name: string, options: DeepPartial<BarStyleOptions & SeriesOptionsCommon>) {
-        const line = this.chart.addBarSeries({ ...options });
-        this._seriesList.push(line);
-        this.legend.makeSeriesRow(name, line);
-        return {
-            name: name,
-            series: line,
-        };
+    
+    createBarSeries(
+        name: string,
+        options: BarSeriesOptions
+    ): { name: string; series: ISeriesApi<SeriesType> } {
+        const { group, legendSymbol = ['▨', '▨'], ...barOptions } = options;
+        const bar = this.chart.addBarSeries(barOptions);
+        this._seriesList.push(bar);
+    
+        // Extract upColor and downColor, with default values
+        const upColor = (bar.options() as any).upColor || 'rgba(0,255,0,1)';    // Default green
+        const downColor = (bar.options() as any).downColor || 'rgba(255,0,0,1)'; // Default red
+    
+        if (!group || group === '') {
+            // Pass both symbols and colors to makeSeriesRow for standalone bars
+            this.legend.makeSeriesRow(name, bar, legendSymbol, [upColor, downColor]);
+        } else {
+            const existingGroup = this.legend._groups.find(g => g.name === group);
+            if (existingGroup) {
+                existingGroup.names.push(name);
+                existingGroup.seriesList.push(bar);
+                existingGroup.solidColors.push(upColor, downColor); // Add both colors
+                existingGroup.legendSymbols.push(legendSymbol[0], legendSymbol[1]); // Add both symbols
+            } else {
+                this.legend.makeSeriesGroup(
+                    group,
+                    [name],
+                    [bar],
+                    [upColor, downColor],  // Two colors for up/down
+                    legendSymbol           // Two symbols for up/down
+                );
+            }
+        }
+    
+        return { name, series: bar };
     }
-
-
+    
+    
+    
     createToolBox() {
         this.toolBox = new ToolBox(this.id, this.chart, this.series, this.commandFunctions);
         this.div.appendChild(this.toolBox.div);
