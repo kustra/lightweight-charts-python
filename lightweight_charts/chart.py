@@ -171,7 +171,7 @@ class Chart(abstract.AbstractChart):
         self._i = Chart.WV.create_window(
                     width, height, x, y, screen, on_top, maximize, title
                 )
-
+        self._q = Chart.WV.function_call_queue
         window = abstract.Window(
                     script_func=lambda s: Chart.WV.evaluate_js(self._i, s),
                     js_api_code='pywebview.api.callback'
