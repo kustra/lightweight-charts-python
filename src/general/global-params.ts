@@ -1,3 +1,5 @@
+import { ISeriesApi, SeriesType } from "lightweight-charts";
+
 export interface GlobalParams extends Window {
     pane: paneStyle;    // TODO shouldnt need this cause of css variables
     handlerInFocus: string;
@@ -19,6 +21,14 @@ interface paneStyle {
     activeColor: string;
 }
 
+export interface LegendItem {
+    name: string;
+    series: ISeriesApi<SeriesType>;
+    colors: string[];
+    legendSymbol: string[];
+    seriesType?: string; 
+    group?: string;  // Optional attribute to indicate the group the item belongs to
+}
 export const paneStyleDefault: paneStyle = {
     backgroundColor: '#0c0d0f',
     hoverBackgroundColor: '#3c434c',
