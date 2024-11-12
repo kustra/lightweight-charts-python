@@ -1,29 +1,33 @@
-import {AreaData, BarData, HistogramData, ISeriesApi, LineData, Logical, MouseEventParams, PriceFormatBuiltIn, PriceFormat, SeriesType } from "lightweight-charts";
+import {AreaData, BarData, HistogramData, ISeriesApi, LineData, Logical, MouseEventParams, PriceFormatBuiltIn, SeriesType } from "lightweight-charts";
+import { CustomCandleSeriesData } from "../custom-candle-series/data";
 import { Handler } from "./handler";
+import { LegendItem } from "./global-params";
+type LegendEntry = LegendSeries | LegendGroup;
 
-// Interfaces for the legend elements
-interface LineElement {
-    name: string;
-    div: HTMLDivElement;
-    row: HTMLDivElement;
-    toggle: HTMLDivElement;
-    series: ISeriesApi<SeriesType>;
-    solid: string;
-    legendSymbol: string; // Add legend symbol for individual series
-}
 
-// Interface for a group of series in the legend
+
 interface LegendGroup {
     name: string;
-    seriesList: ISeriesApi<SeriesType>[];
+    seriesList: LegendItem[];  // Each `LegendItem` contains `colors`, `legendSymbol`, and `seriesType`
     div: HTMLDivElement;
     row: HTMLDivElement;
     toggle: HTMLDivElement;
-    solidColors: string[];
-    names: string[];
-    legendSymbols: string[]; // Add array of legend symbols for grouped series
 }
-// Define the SVG path data
+
+interface LegendSeries extends LegendItem {
+    div: HTMLDivElement;
+    row: HTMLDivElement;
+    toggle: HTMLDivElement;
+}
+const lastSeriesDataCache = new Map<ISeriesApi<SeriesType>, any>();
+const lastGroupDataCache = new Map<string, any[]>();
+
+
+function getLastData(series: ISeriesApi<SeriesType>) {
+    return lastSeriesDataCache.get(series) || null;
+}
+
+
 const openEye = `
 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="16" viewBox="0 0 24 24">
     <path style="fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;stroke:#FFF;stroke-opacity:1;stroke-miterlimit:4;" 
@@ -42,7 +46,7 @@ const openEye = `
 
 const closedEye = `
 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="16" viewBox="0 0 24 24">
-    <path style="fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;stroke:#FFF;stroke-opacity:1;stroke-miterlimit:4;" 
+ <path style="fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;stroke:#FFF;stroke-opacity:1;stroke-miterlimit:4;" 
           d="M 3 3 L 21 21" />
     <path style="fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;stroke:#FFF;stroke-opacity:1;stroke-miterlimit:4;" 
           d="M 21.998437 12 
@@ -57,6 +61,7 @@ const closedEye = `
              C 12.822 15 13.566 14.633 14.1 14.1" />
 </svg>
 `;
+
 export class Legend {
     private handler: Handler;
     public div: HTMLDivElement;
@@ -69,7 +74,8 @@ export class Legend {
 
     private text: HTMLSpanElement;
     private candle: HTMLDivElement;
-    public _lines: LineElement[] = [];
+    private _items: LegendEntry[] = [];
+    public _lines: LegendSeries[] = [];
     public _groups: LegendGroup[] = [];
 
     constructor(handler: Handler) {
@@ -102,10 +108,13 @@ export class Legend {
         this.div.appendChild(seriesWrapper);
         this.handler.div.appendChild(this.div);
     }
-
-    legendItemFormat(num: number, decimal: number) {
+    legendItemFormat(num: number | undefined, decimal: number): string {
+        if (typeof num !== 'number' || isNaN(num)) {
+            return '-';  // Default display when data is missing
+        }
         return num.toFixed(decimal).toString().padStart(8, ' ');
     }
+    
 
     shorthandFormat(num: number) {
         const absNum = Math.abs(num);
@@ -113,22 +122,36 @@ export class Legend {
                absNum >= 1000 ? (num / 1000).toFixed(1) + 'K' :
                num.toString().padStart(8, ' ');
     }
-    makeSeriesRow(
-        name: string,
-        series: ISeriesApi<SeriesType>,
-        legendSymbol: string[] = ['▨'],
-        colors: string[]
-    ): HTMLDivElement {
+    makeSeriesRow(line: LegendItem): HTMLDivElement {
         const row = document.createElement('div');
         row.style.display = 'flex';
         row.style.alignItems = 'center';
     
         const div = document.createElement('div');
-        // Iterate over colors and symbols for multi-color support
-        div.innerHTML = legendSymbol
-            .map((symbol, index) => `<span style="color: ${colors[index] || colors[0]};">${symbol}</span>`)
-            .join(' ') + ` ${name}`;
+        const displayOCvalues = ['Bar', 'customCandle', 'htfCandle'].includes(line.seriesType || '');
     
+        if (displayOCvalues) {
+            const openPrice = '-';
+            const closePrice = '-';
+    
+            const upSymbol = line.legendSymbol[0] || '▨';
+            const downSymbol = line.legendSymbol[1] || upSymbol;
+            const upColor = line.colors[0] || '#00FF00';
+            const downColor = line.colors[1] || '#FF0000';
+    
+            div.innerHTML = `
+                <span style="color: ${upColor};">${upSymbol}</span>
+                <span style="color: ${downColor};">${downSymbol}</span>
+                ${line.name}: <span style="color: ${downColor};">O ${openPrice}</span>, 
+                <span style="color: ${upColor};">C ${closePrice}</span>
+            `;
+        } else {
+            div.innerHTML = line.legendSymbol
+                .map((symbol, index) => `<span style="color: ${line.colors[index] || line.colors[0]};">${symbol}</span>`)
+                .join(' ') + ` ${line.name}`;
+        }
+    
+        // Toggle visibility icon
         const toggle = document.createElement('div');
         toggle.classList.add('legend-toggle-switch');
     
@@ -139,7 +162,7 @@ export class Legend {
         let visible = true;
         toggle.addEventListener('click', () => {
             visible = !visible;
-            series.applyOptions({ visible });
+            line.series.applyOptions({ visible });
             toggle.innerHTML = '';
             toggle.appendChild(visible ? onIcon.cloneNode(true) : offIcon.cloneNode(true));
         });
@@ -148,109 +171,214 @@ export class Legend {
         row.appendChild(toggle);
         this.seriesContainer.appendChild(row);
     
-        // Push the row and related information to the `_lines` array
-        this._lines.push({
-            name,
+        // Add row, div, and toggle to line (LegendItem)
+        const legendSeries: LegendSeries = {
+            ...line,
             div,
             row,
             toggle,
-            series,
-            solid: colors[0],  // Assume the first color is the main color for the series
-            legendSymbol: legendSymbol[0],  // Store the primary legend symbol
-        });
+        };
+    
+        this._lines.push(legendSeries);
     
         return row;
     }
     
-    makeSeriesGroup(
-        groupName: string,
-        names: string[],
-        seriesList: ISeriesApi<SeriesType>[],
-        colors: string[],
-        legendSymbols: string[]
-    ): HTMLDivElement {
-        const row = document.createElement('div');
-        row.style.display = 'flex';
-        row.style.alignItems = 'center';
+    addLegendItem(item: LegendItem): HTMLDivElement {
+        let entry: LegendEntry;
     
-        const div = document.createElement('div');
-        div.innerHTML = `<span style="font-weight: bold;">${groupName}:</span>`;
+        if (item.group) {
+            // Check if the group already exists
+            let group = this._groups.find(g => g.name === item.group);
+            if (group) {
+                // Add the item to the existing group
+                group.seriesList.push(item);
+                // Update the group's div content
+                entry = group;
+                return group.row;
+            } else {
+                // Create a new group with the item
+                const groupRow = this.makeSeriesGroup(item.group, [item]);
+                entry = this._groups[this._groups.length - 1]; // Get the newly added group
+                return groupRow;
+            }
+        } else {
+            // Add as an individual series
+            const seriesRow = this.makeSeriesRow(item);
+            entry = this._lines[this._lines.length - 1]; // Get the newly added series
+            return seriesRow;
+        }
     
-        const toggle = document.createElement('div');
-        toggle.classList.add('legend-toggle-switch');
+        // Add the entry to _items
+        this._items.push(entry);
+    }
+    deleteLegendEntry(seriesName?: string, groupName?: string): void {
+        if (groupName && !seriesName) {
+            // Remove entire group
+            const groupIndex = this._groups.findIndex(group => group.name === groupName);
+            if (groupIndex !== -1) {
+                const legendGroup = this._groups[groupIndex];
     
-        const onIcon = this.createSvgIcon(openEye);
-        const offIcon = this.createSvgIcon(closedEye);
-        toggle.appendChild(onIcon.cloneNode(true)); // Default to visible
+                // Remove the group's DOM elements
+                this.seriesContainer.removeChild(legendGroup.row);
     
-        let visible = true;
-        toggle.addEventListener('click', () => {
-            visible = !visible;
-            seriesList.forEach(series => series.applyOptions({ visible }));
-            toggle.innerHTML = ''; // Clear toggle before appending new icon
-            toggle.appendChild(visible ? onIcon.cloneNode(true) : offIcon.cloneNode(true));
-        });
+                // Optionally, remove all series in the group from the chart
+                // legendGroup.seriesList.forEach(item => item.series.remove());
     
-        // Build the legend content for each series in the group
-        let colorIndex = 0;  // Separate index for colors and symbols to account for bar pairs
-        names.forEach((name, index) => {
-        const series = seriesList[index];
-        const isBarSeries = series && series.seriesType() === 'Bar';
+                // Remove from the _groups array
+                this._groups.splice(groupIndex, 1);
     
-            if (isBarSeries) {
-                // Use current color index for the up symbol/color, then increment to down symbol/color
-                const upSymbol = legendSymbols[colorIndex] || '▨';
-                const downSymbol = legendSymbols[colorIndex + 1] || '▨';
-                const upColor = colors[colorIndex];
-                const downColor = colors[colorIndex + 1];
+                // Also remove from _items array
+                this._items = this._items.filter(entry => entry !== legendGroup);
     
-                // Dual symbol and color formatting for bar series
-                div.innerHTML += `
+                console.log(`Group "${groupName}" removed.`);
+            } else {
+                console.warn(`Legend group with name "${groupName}" not found.`);
+            }
+        } else if (seriesName) {
+            // Remove individual series
+            let removed = false;
+    
+            if (groupName) {
+                // Remove from specific group
+                const group = this._groups.find(g => g.name === groupName);
+                if (group) {
+                    const itemIndex = group.seriesList.findIndex(item => item.name === seriesName);
+                    if (itemIndex !== -1) {
+                        const seriesItem = group.seriesList[itemIndex];
+    
+                        // Remove from the group's seriesList
+                        group.seriesList.splice(itemIndex, 1);
+    
+                        // Update the group's legend content
+    
+                        // If the group is now empty, remove it
+                        if (group.seriesList.length === 0) {
+                            this.seriesContainer.removeChild(group.row);
+                            this._groups = this._groups.filter(g => g !== group);
+                            this._items = this._items.filter(entry => entry !== group);
+                            console.log(`Group "${groupName}" is empty and has been removed.`);
+                        }
+    
+                        // Optionally, remove the series from the chart
+                        // seriesItem.series.remove();
+    
+                        removed = true;
+                        console.log(`Series "${seriesName}" removed from group "${groupName}".`);
+                    }
+                } else {
+                    console.warn(`Legend group with name "${groupName}" not found.`);
+                }
+            }
+    
+            if (!removed) {
+                // Remove from _lines (individual legend items)
+                const seriesIndex = this._lines.findIndex(series => series.name === seriesName);
+                if (seriesIndex !== -1) {
+                    const legendSeries = this._lines[seriesIndex];
+    
+                    // Remove the DOM elements
+                    this.seriesContainer.removeChild(legendSeries.row);
+    
+                    // Remove from the _lines array
+                    this._lines.splice(seriesIndex, 1);
+    
+                    // Also remove from _items array
+                    this._items = this._items.filter(entry => entry !== legendSeries);
+    
+                    // Optionally, remove the series from the chart
+                    // legendSeries.series.remove();
+    
+                    removed = true;
+                    console.log(`Series "${seriesName}" removed.`);
+                }
+            }
+    
+            if (!removed) {
+                console.warn(`Legend item with name "${seriesName}" not found.`);
+            }
+        } else {
+            console.warn(`No seriesName or groupName provided for deletion.`);
+        }
+    }
+    
+    makeSeriesGroup(groupName: string, items: LegendItem[]): HTMLDivElement {
+        // Check if the group already exists
+        let group = this._groups.find(g => g.name === groupName);
+
+        if (group) {
+            // Add items to the existing group
+            group.seriesList.push(...items);
+            return group.row;
+        } else {
+            // Create a new group
+            const row = document.createElement('div');
+            row.style.display = 'flex';
+            row.style.alignItems = 'center';
+
+            const div = document.createElement('div');
+            div.innerHTML = `<span style="font-weight: bold;">${groupName}:</span>`;
+
+            const toggle = document.createElement('div');
+            toggle.classList.add('legend-toggle-switch');
+            const onIcon = this.createSvgIcon(openEye);
+            const offIcon = this.createSvgIcon(closedEye);
+            toggle.appendChild(onIcon.cloneNode(true));
+
+            let visible = true;
+            toggle.addEventListener('click', () => {
+                visible = !visible;
+                items.forEach(item => item.series.applyOptions({ visible }));
+                toggle.innerHTML = '';
+                toggle.appendChild(visible ? onIcon.cloneNode(true) : offIcon.cloneNode(true));
+            });
+
+            items.forEach(item => {
+                
+                const displayOCvalues = item.seriesType === 'Bar' || item.seriesType === 'customCandle' || item.seriesType === 'htfCandle';
+
+                if (displayOCvalues) {
+                    const [upSymbol, downSymbol] = item.legendSymbol;
+                    const [upColor, downColor] = item.colors;
+                    // Dummy values (to be updated dynamically in the legend handler)
+                    const openPrice = '-';
+                    const closePrice = '-';
+                    div.innerHTML += `
                     <span style="color: ${upColor};">${upSymbol}</span>
                     <span style="color: ${downColor};">${downSymbol}</span>
-                    <span style="color: white; font-weight: normal;">${name}: -</span>
+                    <span>${name}: 
+                        <span style="color: ${downColor};">O ${openPrice}</span>, 
+                        <span style="color: ${upColor};">C ${closePrice}</span>
+                    </span>
                 `;
+                } else {
+                    const color = item.colors[0] || '#000';
+                    const symbol = item.legendSymbol[0] || '▨';
+                    const price = '-'; // Dummy price
     
-                // Increment color index by 2 for bar series (to account for up/down pair)
-                colorIndex += 2;
-            } else {
-                // Single symbol and color for non-bar series
-                const singleSymbol = legendSymbols[colorIndex] || '▨';
-                const singleColor = colors[colorIndex];
-    
-                div.innerHTML += `
-                    <span style="color: ${singleColor};">${singleSymbol}</span>
-                    <span style="font-weight: normal;">${name}: -</span>
-                `;
-    
-                // Increment color index by 1 for non-bar series
-                colorIndex += 1;
-            }
-        });
-    
-        // Add div and toggle to row
-        row.appendChild(div);
-        row.appendChild(toggle);
-    
-        // Append row to the series container
-        this.seriesContainer.appendChild(row);
-    
-        // Store group data
-        this._groups.push({
-            name: groupName,
-            seriesList,
-            div,
-            row,
-            toggle,
-            solidColors: colors,
-            names,
-            legendSymbols,
-        });
-    
-        return row;
+                    div.innerHTML += `
+                    <span style="color: ${color};">${symbol}</span>
+                    <span>${name}: ${price}</span>
+                `;                }
+            });
+
+            row.appendChild(div);
+            row.appendChild(toggle);
+            this.seriesContainer.appendChild(row);
+
+            // Add the new group to `_groups`
+            const newGroup: LegendGroup = {
+                name: groupName,
+                seriesList: items,
+                div,
+                row,
+                toggle
+            };
+            this._groups.push(newGroup);
+
+            return row;
+        }
     }
-    
-    
 
     private createSvgIcon(svgContent: string): SVGElement {
         const tempContainer = document.createElement('div');
@@ -258,20 +386,18 @@ export class Legend {
         const svgElement = tempContainer.querySelector('svg');
         return svgElement as SVGElement;
     }
-
     legendHandler(param: MouseEventParams, usingPoint = false) {
         if (!this.ohlcEnabled && !this.linesEnabled && !this.percentEnabled) return;
-
         const options: any = this.handler.series.options();
         if (!param.time) {
             this.candle.style.color = 'transparent';
             this.candle.innerHTML = this.candle.innerHTML.replace(options['upColor'], '').replace(options['downColor'], '');
             return;
         }
-
+    
         let data: any;
         let logical: Logical | null = null;
-
+    
         if (usingPoint) {
             const timeScale = this.handler.chart.timeScale();
             const coordinate = timeScale.timeToCoordinate(param.time);
@@ -280,18 +406,18 @@ export class Legend {
         } else {
             data = param.seriesData.get(this.handler.series);
         }
-
+    
+        // Update the main candle legend content
         let str = '<span style="line-height: 1.8;">';
         if (data) {
-            // OHLC Data
             if (this.ohlcEnabled) {
                 str += `O ${this.legendItemFormat(data.open, this.handler.precision)} `;
                 str += `| H ${this.legendItemFormat(data.high, this.handler.precision)} `;
                 str += `| L ${this.legendItemFormat(data.low, this.handler.precision)} `;
                 str += `| C ${this.legendItemFormat(data.close, this.handler.precision)} `;
             }
-
-            // Percentage Movement
+    
+            // Display percentage move if enabled
             if (this.percentEnabled) {
                 const percentMove = ((data.close - data.open) / data.open) * 100;
                 const color = percentMove > 0 ? options['upColor'] : options['downColor'];
@@ -299,13 +425,15 @@ export class Legend {
                 str += this.colorBasedOnCandle ? `| <span style="color: ${color};">${percentStr}</span>` : `| ${percentStr}`;
             }
         }
+    
         this.candle.innerHTML = str + '</span>';
-
-        this.updateGroupLegend(param, logical, usingPoint);
-        this.updateSeriesLegend(param, logical, usingPoint);
+    
+        // Update group legend and series legend
+        this.updateGroupDisplay(param, logical, usingPoint);
+        this.updateSeriesDisplay(param, logical, usingPoint);
     }
     
-    private updateGroupLegend(param: MouseEventParams, logical: Logical | null, usingPoint: boolean) {
+    private updateGroupDisplay(param: MouseEventParams, logical: Logical | null, usingPoint: boolean) {
         this._groups.forEach((group) => {
             if (!this.linesEnabled) {
                 group.row.style.display = 'none';
@@ -313,137 +441,134 @@ export class Legend {
             }
             group.row.style.display = 'flex';
     
-            // Start building the legend text with the group name
-            let legendText = `<span style="font-weight: bold;">${group.name}:</span>`;
+            let legendText = `<span style="font-weight: bold;">${group.name}:</span> `;
     
-            // Track color index for bar-specific colors and symbols
-            let colorIndex = 0;
+            group.seriesList.forEach((seriesItem) => {
+                const data = param.seriesData.get(seriesItem.series) || getLastData(seriesItem.series);
+                if (!data) return;
+
+                const seriesType = seriesItem.seriesType || 'Line';
+                const name = seriesItem.name;
+                const priceFormat = seriesItem.series.options().priceFormat as PriceFormatBuiltIn;
+
+                // Check if the series type supports OHLC values
+                const isOHLC = seriesType === 'Bar' || seriesType === 'customCandle' || seriesType === 'htfCandle';
+                if (isOHLC) {
+                                // Ensure properties are available or skip
+                    const { open, close, high, low } = data;
+                    if (open == null || close == null || high == null || low == null) return;
     
-            // Iterate over each series in the group
-            group.seriesList.forEach((series, idx) => {
-                const seriesType = series.seriesType();
-                let data;
+                    //const { open, close } = data as CustomCandleSeriesData || {};
+                    if (open == null || close == null) {
+                        legendText += `${name}: - `;
+                        return;
+                    }
     
-                // Get data based on the current logical point or series data
-                if (usingPoint && logical) {
-                    data = series.dataByIndex(logical);
-                } else {
-                    data = param.seriesData.get(series);
-                }
+                    const openPrice = this.legendItemFormat(open, priceFormat.precision);
+                    const closePrice = this.legendItemFormat(close, priceFormat.precision);
+                    const isUp = close > open;
+                    const color = isUp ? seriesItem.colors[0] : seriesItem.colors[1];
+                    const symbol = isUp ? seriesItem.legendSymbol[0] : seriesItem.legendSymbol[1];
     
-                if (!data) return;  // Skip if no data is available for this series
-    
-                // Retrieve price format for precision
-                const priceFormat = series.options().priceFormat as PriceFormatBuiltIn;
-                const name = group.names[idx];
-    
-                if (seriesType === 'Bar') {
-                    // Handle Bar series with open and close values and separate up/down symbols and colors
-                    const barData = data as BarData;
-                    const openPrice = this.legendItemFormat(barData.open, priceFormat.precision);
-                    const closePrice = this.legendItemFormat(barData.close, priceFormat.precision);
-    
-                    const upSymbol = group.legendSymbols[colorIndex] || '▨';
-                    const downSymbol = group.legendSymbols[colorIndex + 1] || '▨';
-                    const upColor = group.solidColors[colorIndex];
-                    const downColor = group.solidColors[colorIndex + 1];
-    
-                    // Append Bar series info with open and close prices, and separate symbols/colors
                     legendText += `
-                        <span style="color: ${upColor};">${upSymbol}</span>
-                        <span style="color: ${downColor};">${downSymbol}</span>
-                        <span>${name}: O ${openPrice}, C ${closePrice}</span>
-                    `;
-                    
-                    colorIndex += 2;  // Increment color index by 2 for Bar series
+                        <span style="color: ${color};">${symbol || '▨'}</span>
+                        <span>${name}: 
+                            <span style="color: ${color};">O ${openPrice}</span>, 
+                            <span style="color: ${color};">C ${closePrice}</span>
+                        </span> `;
                 } else {
-                    // Handle other series types that use a single `value`
-                    const otherData = data as LineData | AreaData | HistogramData;
-                    const price = this.legendItemFormat(otherData.value, priceFormat.precision);
+                    // Handle series types with a single 'value' property
+                    const valueData = data as LineData | AreaData | HistogramData || {};
+                    const value = valueData.value;
+                    if (value == null) {
+                        legendText += `${name}: - `;
+                        return;
+                    }
     
-                    const symbol = group.legendSymbols[colorIndex] || '▨';
-                    const color = group.solidColors[colorIndex];
+                    const priceFormat = seriesItem.series.options().priceFormat as PriceFormatBuiltIn;
+                    const formattedValue = this.legendItemFormat(value, priceFormat.precision);
+                    const color = seriesItem.colors[0];
+                    const symbol = seriesItem.legendSymbol[0] || '▨';
     
-                    // Append non-Bar series info with single symbol and color
                     legendText += `
-                    <span style="color: ${color};">${symbol}</span>
-                    <span>${name}: ${price}</span>
-                    `;
-                    colorIndex += 1;  // Increment color index by 1 for non-Bar series
+                        <span style="color: ${color};">${symbol}</span>
+                        <span>${name}: ${formattedValue}</span> `;
                 }
             });
     
-            // Update the group legend div with the constructed legend text
+            // Update the group's div content
             group.div.innerHTML = legendText;
         });
     }
-    private updateSeriesLegend(param: MouseEventParams, logical: Logical | null, usingPoint: boolean) {
+    private updateSeriesDisplay(param: MouseEventParams, logical: Logical | null, usingPoint: boolean) {
         if (!this._lines || !this._lines.length) {
             console.error("No lines available to update legend.");
             return;
         }
     
         this._lines.forEach((e) => {
-            // Check if the line row should be displayed
             if (!this.linesEnabled) {
                 e.row.style.display = 'none';
                 return;
             }
             e.row.style.display = 'flex';
-        
-            // Determine series type and get the appropriate data
-            const seriesType = e.series.seriesType();
-            let data;
-        
-            if (usingPoint && logical) {
-                data = e.series.dataByIndex(logical);
-            } else {
-                data = param.seriesData.get(e.series);
-            }
-        
-            // If no data is available, show a placeholder and continue
+    
+            const data = param.seriesData.get(e.series) || getLastData(e.series);
             if (!data) {
                 e.div.innerHTML = `${e.name}: -`;
                 return;
             }
-        
-            const priceFormat = e.series.options().priceFormat as PriceFormatBuiltIn;
-            let legendContent: string;
-            console.log(`Series: ${e.name}, Type: ${seriesType}, Data:`, data);
-
-            if (seriesType === 'Bar') {
-                // Handle Bar series with open and close values
-                const barData = data as BarData;
-                const openPrice = this.legendItemFormat(barData.open, priceFormat.precision);
-                const closePrice = this.legendItemFormat(barData.close, priceFormat.precision);
-        
-                // Use specific symbols and colors for Bar series open/close display
-                const upSymbol = e.legendSymbol[0] || '▨';
-                const downSymbol = e.legendSymbol[1] || '▨';
-                const upColor = e.solid[0];
-                const downColor = e.solid[1];
-        
-                legendContent = `
-                    <span style="color: ${upColor};">${upSymbol}</span>
-                    <span style="color: ${downColor};">${downSymbol}</span>
-                    ${e.name}: O ${openPrice}, C ${closePrice}
+    
+            const seriesType = e.seriesType || 'Line';
+    
+            // Check if the series type supports OHLC values
+            const isOHLC = ['Bar', 'customCandle', 'htfCandle'].includes(seriesType);
+    
+            if (isOHLC) {
+                const { open, close } = data as CustomCandleSeriesData;
+                if (open == null || close == null) {
+                    e.div.innerHTML = `${e.name}: -`;
+                    return;
+                }
+    
+                const priceFormat = e.series.options().priceFormat as PriceFormatBuiltIn;
+                const openPrice = this.legendItemFormat(open, priceFormat.precision);
+                const closePrice = this.legendItemFormat(close, priceFormat.precision);
+                const isUp = close > open;
+                const color = isUp ? e.colors[0] : e.colors[1];
+                const symbol = isUp ? e.legendSymbol[0] : e.legendSymbol[1];
+    
+                e.div.innerHTML = `
+                    <span style="color: ${color};">${symbol || '▨'}</span>
+                    ${e.name}: 
+                    <span style="color: ${color};">O ${openPrice}</span>, 
+                    <span style="color: ${color};">C ${closePrice}</span>
                 `;
             } else if (seriesType === 'Histogram') {
-                // Handle Histogram with shorthand format
                 const histogramData = data as HistogramData;
-                const price = this.shorthandFormat(histogramData.value);
-        
-                legendContent = `<span style="color: ${e.solid};">${e.legendSymbol || '▨'}</span> ${e.name}: ${price}`;
-            } else {
-                // Handle Line, Area, and other series types with a single value
-                const otherData = data as LineData | AreaData;
-                const price = this.legendItemFormat(otherData.value, priceFormat.precision);
-        
-                legendContent = `<span style="color: ${e.solid};">${e.legendSymbol || '▨'}</span> ${e.name}: ${price}`;
-            }
-        
-            // Update the legend row content
-            e.div.innerHTML = legendContent;
-        });
-    }}
+                if (histogramData.value == null) {
+                    e.div.innerHTML = `${e.name}: -`;
+                    return;
+                }
     
+                const price = this.shorthandFormat(histogramData.value);
+                e.div.innerHTML = `
+                    <span style="color: ${e.colors[0]};">${e.legendSymbol[0] || '▨'}</span> 
+                    ${e.name}: ${price}`;
+            } else {
+                // Handle series types with a single 'value' property
+                const valueData = data as LineData | AreaData;
+                if (valueData.value == null) {
+                    e.div.innerHTML = `${e.name}: -`;
+                    return;
+                }
+    
+                const priceFormat = e.series.options().priceFormat as PriceFormatBuiltIn;
+                const value = this.legendItemFormat(valueData.value, priceFormat.precision);
+                e.div.innerHTML = `
+                    <span style="color: ${e.colors[0]};">${e.legendSymbol[0] || '▨'}</span> 
+                    ${e.name}: ${value}`;
+            }
+        });
+    }
+}    
