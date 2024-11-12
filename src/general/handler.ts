@@ -1,5 +1,6 @@
 import {
     AreaStyleOptions,
+    BarData,
     BarStyleOptions,
     ColorType,
     CrosshairMode,
@@ -7,6 +8,7 @@ import {
     HistogramStyleOptions,
     IChartApi,
     ISeriesApi,
+    ISeriesPrimitive,
     LineStyleOptions,
     LogicalRange,
     LogicalRangeChangeEventHandler,
@@ -15,19 +17,21 @@ import {
     SeriesOptionsCommon,
     SeriesType,
     Time,
-    createChart
+    createChart,
 } from "lightweight-charts";
 
-import { GlobalParams, globalParamInit } from "./global-params";
+import { GlobalParams, globalParamInit, LegendItem } from "./global-params";
 import { Legend } from "./legend";
 import { ToolBox } from "./toolbox";
 import { TopBar } from "./topbar";
 
-
+//import { ProbabilityConeOverlay, ProbabilityConeOptions } from "../probability-cone/probability-cone";
 export interface Scale{
     width: number,
     height: number,
 }
+
+
 // Define specific options interfaces with optional group and legendSymbol properties
 interface LineSeriesOptions extends DeepPartial<LineStyleOptions & SeriesOptionsCommon> {
     group?: string;
@@ -48,6 +52,8 @@ interface BarSeriesOptions extends DeepPartial<BarStyleOptions & SeriesOptionsCo
     group?: string;
     legendSymbol?: string[]; // Updated to an array of strings to support dual symbols
 }
+
+
 
 
 globalParamInit();
@@ -73,6 +79,7 @@ export class Handler {
     public spinner: HTMLDivElement | undefined;
 
     public _seriesList: ISeriesApi<SeriesType>[] = [];
+    public seriesMap: Map<string, ISeriesApi<SeriesType>> = new Map();
 
     // TODO find a better solution rather than the 'position' parameter
     constructor(
@@ -120,223 +127,238 @@ export class Handler {
     }
 
 
-    reSize() {
-        let topBarOffset = this.scale.height !== 0 ? this._topBar?._div.offsetHeight || 0 : 0
-        this.chart.resize(window.innerWidth * this.scale.width, (window.innerHeight * this.scale.height) - topBarOffset)
-        this.wrapper.style.width = `${100 * this.scale.width}%`
-        this.wrapper.style.height = `${100 * this.scale.height}%`
-        
-        // TODO definitely a better way to do this
-        if (this.scale.height === 0 || this.scale.width === 0) {
-            // if (this.legend.div.style.display == 'flex') this.legend.div.style.display = 'none'
-            if (this.toolBox) {
-                this.toolBox.div.style.display = 'none'
-            }
-        }
-        else {
-            // this.legend.div.style.display = 'flex'
-            if (this.toolBox) {
-                this.toolBox.div.style.display = 'flex'
-            }
-        }
-    }
-
-    private _createChart() {
-        return createChart(this.div, {
-            width: window.innerWidth * this.scale.width,
-            height: window.innerHeight * this.scale.height,
-            layout:{
-                textColor: window.pane.color,
-                background: {
-                    color: '#000000',
-                    type: ColorType.Solid,
-                },
-                fontSize: 12
-            },
-            rightPriceScale: {
-                scaleMargins: {top: 0.3, bottom: 0.25},
-            },
-            timeScale: {timeVisible: true, secondsVisible: false},
-            crosshair: {
-                mode: CrosshairMode.Normal,
-                vertLine: {
-                    labelBackgroundColor: 'rgb(46, 46, 46)'
-                },
-                horzLine: {
-                    labelBackgroundColor: 'rgb(55, 55, 55)'
+        reSize() {
+            let topBarOffset = this.scale.height !== 0 ? this._topBar?._div.offsetHeight || 0 : 0
+            this.chart.resize(window.innerWidth * this.scale.width, (window.innerHeight * this.scale.height) - topBarOffset)
+            this.wrapper.style.width = `${100 * this.scale.width}%`
+            this.wrapper.style.height = `${100 * this.scale.height}%`
+            
+            // TODO definitely a better way to do this
+            if (this.scale.height === 0 || this.scale.width === 0) {
+                // if (this.legend.div.style.display == 'flex') this.legend.div.style.display = 'none'
+                if (this.toolBox) {
+                    this.toolBox.div.style.display = 'none'
                 }
-            },
-            grid: {
-                vertLines: {color: 'rgba(29, 30, 38, 5)'},
-                horzLines: {color: 'rgba(29, 30, 58, 5)'},
-            },
-            handleScroll: {vertTouchDrag: true},
-        })
-    }
-
-    createCandlestickSeries() {
-        const up = 'rgba(39, 157, 130, 100)'
-        const down = 'rgba(200, 97, 100, 100)'
-        const candleSeries = this.chart.addCandlestickSeries({
-            upColor: up, borderUpColor: up, wickUpColor: up,
-            downColor: down, borderDownColor: down, wickDownColor: down
-        });
-        candleSeries.priceScale().applyOptions({
-            scaleMargins: {top: 0.2, bottom: 0.2},
-        });
-        return candleSeries;
-    }
-
-    createVolumeSeries() {
-        const volumeSeries = this.chart.addHistogramSeries({
-            color: '#26a69a',
-            priceFormat: {type: 'volume'},
-            priceScaleId: 'volume_scale',
-        })
-        volumeSeries.priceScale().applyOptions({
-            scaleMargins: {top: 0.8, bottom: 0},
-        });
-        return volumeSeries;
-    }
-
-    createLineSeries(
-        name: string,
-        options: LineSeriesOptions
-    ): { name: string; series: ISeriesApi<SeriesType> } {
-        const { group, legendSymbol = '▨', ...lineOptions } = options;
-        const line = this.chart.addLineSeries(lineOptions);
-        this._seriesList.push(line);
-    
-        const color = line.options().color || 'rgba(255,0,0,1)';
-        const solidColor = color.startsWith('rgba') ? color.replace(/[^,]+(?=\))/, '1') : color;
-    
-        if (!group || group === '') {
-            this.legend.makeSeriesRow(name, line, [legendSymbol], [solidColor]);
-        } else {
-            const existingGroup = this.legend._groups.find(g => g.name === group);
-            if (existingGroup) {
-                existingGroup.names.push(name);
-                existingGroup.seriesList.push(line);
-                existingGroup.solidColors.push(solidColor); // Single color
-                existingGroup.legendSymbols.push(legendSymbol); // Single symbol
-            } else {
-                this.legend.makeSeriesGroup(group, [name], [line], [solidColor], [legendSymbol]);
+            }
+            else {
+                // this.legend.div.style.display = 'flex'
+                if (this.toolBox) {
+                    this.toolBox.div.style.display = 'flex'
+                }
             }
         }
-    
-        return { name, series: line };
-    }
-    
-    createHistogramSeries(
-        name: string,
-        options: HistogramSeriesOptions
-    ): { name: string; series: ISeriesApi<SeriesType> } {
-        const { group, legendSymbol = '▨', ...histogramOptions } = options;
-        const histogram = this.chart.addHistogramSeries(histogramOptions);
-        this._seriesList.push(histogram);
-    
-        const color = histogram.options().color || 'rgba(255,0,0,1)';
-        const solidColor = color.startsWith('rgba') ? color.replace(/[^,]+(?=\))/, '1') : color;
-    
-        if (!group || group === '') {
-            this.legend.makeSeriesRow(name, histogram, [legendSymbol], [solidColor]);
-        } else {
-            const existingGroup = this.legend._groups.find(g => g.name === group);
-            if (existingGroup) {
-                existingGroup.names.push(name);
-                existingGroup.seriesList.push(histogram);
-                existingGroup.solidColors.push(solidColor); // Single color
-                existingGroup.legendSymbols.push(legendSymbol); // Single symbol
-            } else {
-                this.legend.makeSeriesGroup(group, [name], [histogram], [solidColor], [legendSymbol]);
-            }
+        public primitives: Map<string, ISeriesPrimitive> = new Map(); // Map of plugin primitive instances by series name
+        private _createChart() {
+            return createChart(this.div, {
+                width: window.innerWidth * this.scale.width,
+                height: window.innerHeight * this.scale.height,
+                layout:{
+                    textColor: window.pane.color,
+                    background: {
+                        color: '#000000',
+                        type: ColorType.Solid,
+                    },
+                    fontSize: 12
+                },
+                rightPriceScale: {
+                    scaleMargins: {top: 0.3, bottom: 0.25},
+                },
+                timeScale: {timeVisible: true, secondsVisible: false},
+                crosshair: {
+                    mode: CrosshairMode.Normal,
+                    vertLine: {
+                        labelBackgroundColor: 'rgb(46, 46, 46)'
+                    },
+                    horzLine: {
+                        labelBackgroundColor: 'rgb(55, 55, 55)'
+                    }
+                },
+                grid: {
+                    vertLines: {color: 'rgba(29, 30, 38, 5)'},
+                    horzLines: {color: 'rgba(29, 30, 58, 5)'},
+                },
+                handleScroll: {vertTouchDrag: true},
+            })
         }
-    
-        return { name, series: histogram };
-    }
-    
-    createAreaSeries(
-        name: string,
-        options: AreaSeriesOptions
-    ): { name: string; series: ISeriesApi<SeriesType> } {
-        const { group, legendSymbol = '▨', ...areaOptions } = options;
-        const area = this.chart.addAreaSeries(areaOptions);
-        this._seriesList.push(area);
-    
-        const color = area.options().color || 'rgba(255,0,0,1)';
-        const solidColor = color.startsWith('rgba') ? color.replace(/[^,]+(?=\))/, '1') : color;
-    
-        if (!group || group === '') {
-            this.legend.makeSeriesRow(name, area, [legendSymbol], [solidColor]);
-        } else {
-            const existingGroup = this.legend._groups.find(g => g.name === group);
-            if (existingGroup) {
-                existingGroup.names.push(name);
-                existingGroup.seriesList.push(area);
-                existingGroup.solidColors.push(solidColor); // Single color
-                existingGroup.legendSymbols.push(legendSymbol); // Single symbol
-            } else {
-                this.legend.makeSeriesGroup(group, [name], [area], [solidColor], [legendSymbol]);
-            }
-        }
-    
-        return { name, series: area };
-    }
-    
-    createBarSeries(
-        name: string,
-        options: BarSeriesOptions
-    ): { name: string; series: ISeriesApi<SeriesType> } {
-        const { group, legendSymbol = ['▨', '▨'], ...barOptions } = options;
-        const bar = this.chart.addBarSeries(barOptions);
-        this._seriesList.push(bar);
-    
-        // Extract upColor and downColor, with default values
-        const upColor = (bar.options() as any).upColor || 'rgba(0,255,0,1)';    // Default green
-        const downColor = (bar.options() as any).downColor || 'rgba(255,0,0,1)'; // Default red
-    
-        if (!group || group === '') {
-            // Pass both symbols and colors to makeSeriesRow for standalone bars
-            this.legend.makeSeriesRow(name, bar, legendSymbol, [upColor, downColor]);
-        } else {
-            const existingGroup = this.legend._groups.find(g => g.name === group);
-            if (existingGroup) {
-                existingGroup.names.push(name);
-                existingGroup.seriesList.push(bar);
-                existingGroup.solidColors.push(upColor, downColor); // Add both colors
-                existingGroup.legendSymbols.push(legendSymbol[0], legendSymbol[1]); // Add both symbols
-            } else {
-                this.legend.makeSeriesGroup(
-                    group,
-                    [name],
-                    [bar],
-                    [upColor, downColor],  // Two colors for up/down
-                    legendSymbol           // Two symbols for up/down
-                );
-            }
-        }
-    
-        return { name, series: bar };
-    }
-    
-    
-    
-    createToolBox() {
-        this.toolBox = new ToolBox(this.id, this.chart, this.series, this.commandFunctions);
-        this.div.appendChild(this.toolBox.div);
-    }
 
-    createTopBar() {
-        this._topBar = new TopBar(this);
-        this.wrapper.prepend(this._topBar._div)
-        return this._topBar;
-    }
+        createCandlestickSeries() {
+            const up = 'rgba(39, 157, 130, 100)'
+            const down = 'rgba(200, 97, 100, 100)'
+            const candleSeries = this.chart.addCandlestickSeries({
+                upColor: up, borderUpColor: up, wickUpColor: up,
+                downColor: down, borderDownColor: down, wickDownColor: down
+            });
+            candleSeries.priceScale().applyOptions({
+                scaleMargins: {top: 0.2, bottom: 0.2},
+            });
+            return candleSeries;
+        }
 
-    toJSON() {
-        // Exclude the chart attribute from serialization
-        const {chart, ...serialized} = this;
-        return serialized;
-    }
+        createVolumeSeries() {
+            const volumeSeries = this.chart.addHistogramSeries({
+                color: '#26a69a',
+                priceFormat: {type: 'volume'},
+                priceScaleId: 'volume_scale',
+            })
+            volumeSeries.priceScale().applyOptions({
+                scaleMargins: {top: 0.8, bottom: 0},
+            });
+            return volumeSeries;
+        }
+
+        createLineSeries(
+            name: string,
+            options: LineSeriesOptions
+        ): { name: string; series: ISeriesApi<SeriesType> } {
+            const { group, legendSymbol = '▨', ...lineOptions } = options;
+            const line = this.chart.addLineSeries(lineOptions);
+            this._seriesList.push(line);
+            this.seriesMap.set(name, line);
+        
+            const color = line.options().color || 'rgba(255,0,0,1)';
+            const solidColor = color.startsWith('rgba') ? color.replace(/[^,]+(?=\))/, '1') : color;
+        
+            const legendItem: LegendItem = {
+                name,
+                series: line,
+                colors: [solidColor],
+                legendSymbol: [legendSymbol],
+                seriesType: "Line",
+                group,
+            };
+        
+            this.legend.addLegendItem(legendItem);
+        
+            return { name, series: line };
+        }
+        
+        
+        createHistogramSeries(
+            name: string,
+            options: HistogramSeriesOptions
+        ): { name: string; series: ISeriesApi<SeriesType> } {
+            const { group, legendSymbol = '▨', ...histogramOptions } = options;
+            const histogram = this.chart.addHistogramSeries(histogramOptions);
+            this._seriesList.push(histogram);
+            this.seriesMap.set(name, histogram);
+        
+            const color = histogram.options().color || 'rgba(255,0,0,1)';
+            const solidColor = color.startsWith('rgba') ? color.replace(/[^,]+(?=\))/, '1') : color;
+        
+            const legendItem: LegendItem = {
+                name,
+                series: histogram,
+                colors: [solidColor],
+                legendSymbol: [legendSymbol],
+                seriesType: "Histogram",
+                group,
+            };
+        
+            this.legend.addLegendItem(legendItem);
+        
+            return { name, series: histogram };
+        }
+        
+        
+        createAreaSeries(
+            name: string,
+            options: AreaSeriesOptions
+        ): { name: string; series: ISeriesApi<SeriesType> } {
+            const { group, legendSymbol = '▨', ...areaOptions } = options;
+            const area = this.chart.addAreaSeries(areaOptions);
+            this._seriesList.push(area);
+            this.seriesMap.set(name, area);
+        
+            const color = area.options().lineColor || 'rgba(255,0,0,1)';
+            const solidColor = color.startsWith('rgba') ? color.replace(/[^,]+(?=\))/, '1') : color;
+        
+            const legendItem: LegendItem = {
+                name,
+                series: area,
+                colors: [solidColor],
+                legendSymbol: [legendSymbol],
+                seriesType: "Area",
+                group,
+            };
+        
+            this.legend.addLegendItem(legendItem);
+        
+            return { name, series: area };
+        }
+        
+
+        
+        createBarSeries(
+            name: string,
+            options: BarSeriesOptions
+        ): { name: string; series: ISeriesApi<SeriesType> } {
+            const { group, legendSymbol = ['▨', '▨'], ...barOptions } = options;
+            const bar = this.chart.addBarSeries(barOptions);
+            this._seriesList.push(bar);
+            this.seriesMap.set(name, bar);
+        
+            const upColor = (bar.options() as any).upColor || 'rgba(0,255,0,1)';
+            const downColor = (bar.options() as any).downColor || 'rgba(255,0,0,1)';
+        
+            const legendItem: LegendItem = {
+                name,
+                series: bar,
+                colors: [upColor, downColor],
+                legendSymbol: legendSymbol,
+                seriesType: "Bar",
+                group,
+            };
+        
+            this.legend.addLegendItem(legendItem);
+        
+            return { name, series: bar };
+        }
+        
+        removeSeries(seriesName: string): void {
+            const series = this.seriesMap.get(seriesName);
+            if (series) {
+                // Remove the series from the chart
+                this.chart.removeSeries(series);
+        
+                // Remove from _seriesList
+                this._seriesList = this._seriesList.filter(s => s !== series);
+        
+                // Remove from seriesMap
+                this.seriesMap.delete(seriesName);
+        
+                // Remove from legend
+                this.legend.deleteLegendEntry(seriesName);
+        
+                // Remove any associated primitives
+                ['Tooltip', 'DeltaTooltip', 'probabilityCone'].forEach(primitiveType => {
+                    this.detachPrimitive(seriesName, primitiveType as any);
+                });
+        
+                console.log(`Series "${seriesName}" removed.`);
+            } else {
+                console.warn(`Series "${seriesName}" not found.`);
+            }
+        }
+        
+
+
+        createToolBox() {
+            this.toolBox = new ToolBox(this.id, this.chart, this.series, this.commandFunctions);
+            this.div.appendChild(this.toolBox.div);
+        }
+
+        createTopBar() {
+            this._topBar = new TopBar(this);
+            this.wrapper.prepend(this._topBar._div)
+            return this._topBar;
+        }
+
+        toJSON() {
+            // Exclude the chart attribute from serialization
+            const {chart, ...serialized} = this;
+            return serialized;
+        }
+          
 
     public static syncCharts(childChart:Handler, parentChart: Handler, crosshairOnly = false) {
         function crosshairHandler(chart: Handler, point: any) {//point: BarData | LineData) {
