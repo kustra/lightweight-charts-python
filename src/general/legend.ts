@@ -1,5 +1,5 @@
 import {AreaData, BarData, HistogramData, ISeriesApi, LineData, Logical, MouseEventParams, PriceFormatBuiltIn, SeriesType } from "lightweight-charts";
-import { CustomCandleSeriesData } from "../custom-candle-series/data";
+import { ohlcSeriesData } from "../ohlc-series/ohlc-series";
 import { Handler } from "./handler";
 import { LegendItem } from "./global-params";
 type LegendEntry = LegendSeries | LegendGroup;
@@ -128,7 +128,7 @@ export class Legend {
         row.style.alignItems = 'center';
     
         const div = document.createElement('div');
-        const displayOCvalues = ['Bar', 'customCandle', 'htfCandle'].includes(line.seriesType || '');
+        const displayOCvalues = ['Bar', 'ohlc'].includes(line.seriesType || '');
     
         if (displayOCvalues) {
             const openPrice = '-';
@@ -193,6 +193,8 @@ export class Legend {
             if (group) {
                 // Add the item to the existing group
                 group.seriesList.push(item);
+                this._items.push(item as LegendSeries);
+
                 // Update the group's div content
                 entry = group;
                 return group.row;
@@ -206,6 +208,8 @@ export class Legend {
             // Add as an individual series
             const seriesRow = this.makeSeriesRow(item);
             entry = this._lines[this._lines.length - 1]; // Get the newly added series
+            this._items.push(item as LegendSeries);
+
             return seriesRow;
         }
     
@@ -231,7 +235,7 @@ export class Legend {
                 // Also remove from _items array
                 this._items = this._items.filter(entry => entry !== legendGroup);
     
-                console.log(`Group "${groupName}" removed.`);
+                //console.log(`Group "${groupName}" removed.`);
             } else {
                 console.warn(`Legend group with name "${groupName}" not found.`);
             }
@@ -335,7 +339,7 @@ export class Legend {
 
             items.forEach(item => {
                 
-                const displayOCvalues = item.seriesType === 'Bar' || item.seriesType === 'customCandle' || item.seriesType === 'htfCandle';
+                const displayOCvalues = item.seriesType === 'Bar' || item.seriesType === 'ohlc';
 
                 if (displayOCvalues) {
                     const [upSymbol, downSymbol] = item.legendSymbol;
@@ -452,13 +456,13 @@ export class Legend {
                 const priceFormat = seriesItem.series.options().priceFormat as PriceFormatBuiltIn;
 
                 // Check if the series type supports OHLC values
-                const isOHLC = seriesType === 'Bar' || seriesType === 'customCandle' || seriesType === 'htfCandle';
+                const isOHLC = seriesType === 'Bar' || seriesType === 'ohlc' || seriesType === 'htfCandle';
                 if (isOHLC) {
                                 // Ensure properties are available or skip
                     const { open, close, high, low } = data;
                     if (open == null || close == null || high == null || low == null) return;
     
-                    //const { open, close } = data as CustomCandleSeriesData || {};
+                    //const { open, close } = data as ohlcSeriesData || {};
                     if (open == null || close == null) {
                         legendText += `${name}: - `;
                         return;
@@ -522,10 +526,10 @@ export class Legend {
             const seriesType = e.seriesType || 'Line';
     
             // Check if the series type supports OHLC values
-            const isOHLC = ['Bar', 'customCandle', 'htfCandle'].includes(seriesType);
+            const isOHLC = ['Bar', 'ohlc', 'htfCandle'].includes(seriesType);
     
             if (isOHLC) {
-                const { open, close } = data as CustomCandleSeriesData;
+                const { open, close } = data as ohlcSeriesData;
                 if (open == null || close == null) {
                     e.div.innerHTML = `${e.name}: -`;
                     return;

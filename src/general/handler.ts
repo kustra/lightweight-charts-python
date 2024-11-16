@@ -1,6 +1,5 @@
 import {
     AreaStyleOptions,
-    BarData,
     BarStyleOptions,
     ColorType,
     CrosshairMode,
@@ -24,6 +23,7 @@ import { GlobalParams, globalParamInit, LegendItem } from "./global-params";
 import { Legend } from "./legend";
 import { ToolBox } from "./toolbox";
 import { TopBar } from "./topbar";
+import { ohlcSeries, ohlcSeriesOptions, ohlcdefaultOptions } from "../ohlc-series/ohlc-series";
 
 //import { ProbabilityConeOverlay, ProbabilityConeOptions } from "../probability-cone/probability-cone";
 export interface Scale{
@@ -313,7 +313,60 @@ export class Handler {
         
             return { name, series: bar };
         }
+        createCustomOHLCSeries(
+            name: string,
+            options: Partial<ohlcSeriesOptions> = {}
+        ): { name: string; series: ISeriesApi<SeriesType> } {
+            const seriesType = 'ohlc';
         
+            const mergedOptions: ohlcSeriesOptions & {
+                seriesType?: string;
+                group?: string;
+                legendSymbol?: string[];
+            } = {
+                ...ohlcdefaultOptions,
+                ...options,
+                seriesType,
+            };
+        
+            const { 
+                group, 
+                legendSymbol = ['⑃', '⑂'], 
+                seriesType: _, 
+                chandelierSize = 1,
+                ...filteredOptions 
+            } = mergedOptions;
+        
+            const Instance = new ohlcSeries();
+            const ohlcCustomSeries = this.chart.addCustomSeries(Instance, {
+                ...filteredOptions,
+                chandelierSize,
+            });
+            this._seriesList.push(ohlcCustomSeries);
+            this.seriesMap.set(name, ohlcCustomSeries);
+        
+            const borderUpColor = mergedOptions.borderUpColor || mergedOptions.upColor;                      
+            const borderDownColor = mergedOptions.borderDownColor || mergedOptions.downColor;                      
+        
+            const colorsArray = [borderUpColor, borderDownColor];
+        
+            const legendSymbolsWithGrouping = chandelierSize > 1 
+                ? legendSymbol.map(symbol => `${symbol} (${chandelierSize})`) 
+                : legendSymbol;
+        
+            const legendItem: LegendItem = {
+                name,
+                series: ohlcCustomSeries,
+                colors: colorsArray,
+                legendSymbol: legendSymbolsWithGrouping,
+                seriesType,
+                group,
+            };
+        
+            this.legend.addLegendItem(legendItem);
+        
+            return { name, series: ohlcCustomSeries };
+        }
         removeSeries(seriesName: string): void {
             const series = this.seriesMap.get(seriesName);
             if (series) {
@@ -329,10 +382,7 @@ export class Handler {
                 // Remove from legend
                 this.legend.deleteLegendEntry(seriesName);
         
-                // Remove any associated primitives
-                ['Tooltip', 'DeltaTooltip', 'probabilityCone'].forEach(primitiveType => {
-                    this.detachPrimitive(seriesName, primitiveType as any);
-                });
+              
         
                 console.log(`Series "${seriesName}" removed.`);
             } else {
