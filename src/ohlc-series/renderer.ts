@@ -230,8 +230,9 @@ export class ohlcSeriesRenderer<TData extends ohlcSeriesData>
 			let wickX = bar.x * horizontalPixelRatio;
 			const groupSize = bar.endIndex - bar.startIndex;
 			if (groupSize && groupSize > 1) {
-					wickX= wickX+((candleWidth) * Math.max(1, groupSize )/2) - ((1-barSpace) * candleWidth) 
-				}
+				wickX= wickX+((candleWidth) * Math.max(1, groupSize )/2)
+			}
+				
 	
 			// Adjust wick heights for the 'Polygon' shape
 			let upperWickTop = high;
