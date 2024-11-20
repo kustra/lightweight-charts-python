@@ -8,13 +8,10 @@ import {
 	WhitespaceData,
 	Time,
 	LineStyle,
-	LineWidth,
-	CandlestickData
+	LineWidth
 } from 'lightweight-charts';
+import { ohlcSeriesData, CandleShape } from './data';
 import { ohlcSeriesRenderer} from './renderer';
-import {
-
-} from 'lightweight-charts';
 
 export interface ohlcSeriesOptions
 	extends CustomSeriesOptions,
@@ -23,7 +20,7 @@ export interface ohlcSeriesOptions
 			'borderColor'
 		> {
 	radius: (barSpacing: number) => number;
-	shape:'Rectangle'|'Rounded'|'Ellipse'|'Arrow'|'Polygon'|'3d';
+	shape:CandleShape;
 	chandelierSize: number 
 	barSpacing: number 
 	lineStyle: LineStyle
@@ -49,7 +46,7 @@ export const ohlcdefaultOptions: ohlcSeriesOptions = {
 		if (bs < 4) return 0;
 		return bs / 3;
 	},
-	shape: 'Rectangle',  // Default shape
+	shape: 'Rectangle' as CandleShape,  // Default shape
 	chandelierSize: 1,
 	barSpacing: 0.8,
 	lineStyle: 0 as LineStyle,
@@ -92,19 +89,5 @@ export class ohlcSeries<TData extends ohlcSeriesData>
 		return ohlcdefaultOptions;
 	}
 }
+// ./types.ts
 
-export interface ohlcSeriesData extends CandlestickData {
-    time: Time;       // The time of the candle, typically required by the chart
-    open: number;     // Opening price
-    high: number;     // Highest price
-    low: number;      // Lowest price
-    close: number;    // Closing price
-
-    // Optional customization properties
-    color?: string;         // Optional fill color for the candle body
-    borderColor?: string;   // Optional color for the candle border
-    wickColor?: string;     // Optional color for the candle wicks
-    shape?: string;         // Optional shape (e.g., 'Rectangle', 'Rounded', 'Ellipse', 'Arrow', '3d', 'Polygon')
-    lineStyle?: number;     // Optional line style (e.g., solid, dashed)
-    lineWidth?: number;     // Optional line width for the border or wick
-}
