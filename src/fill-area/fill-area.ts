@@ -22,8 +22,8 @@ export class FillArea extends PluginBase implements ISeriesPrimitive<Time> {
         super();
     
         // Default fallback colors
-        const defaultOriginColor = '#0000FF'; // Blue
-        const defaultDestinationColor = '#FF0000'; // Red
+        const defaultOriginColor = setOpacity('#0000FF',.25); // Blue
+        const defaultDestinationColor = setOpacity('#FF0000',.25); // Red
     
         // Use the utility function to check if the series supports `lineColor`
         const originSeriesColor = hasColorOption(originSeries)

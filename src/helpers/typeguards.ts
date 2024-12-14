@@ -1,6 +1,7 @@
 import { SeriesType, ISeriesApi, AreaData, Background, BarData, CandlestickData, ColorType, HistogramData, LineData, OhlcData, SolidColor, Time, VerticalGradientColor } from "lightweight-charts";
 import { ISeriesApiExtended, decorateSeries } from "./general";
 import { Legend } from "../general/legend";
+import { LegendSeries, LegendPrimitive, LegendGroup, LegendItem } from "../general";
 export function isSolidColor(background: Background): background is SolidColor {
   return background.type === ColorType.Solid;
 }
@@ -47,4 +48,11 @@ export function ensureExtendedSeries(
     console.log("Decorating the series dynamically.");
     return decorateSeries(series, legend);
   }
-  
+
+  export function isLegendPrimitive(item: LegendSeries | LegendPrimitive): item is LegendPrimitive {
+    return (item as LegendPrimitive).primitive !== undefined;
+}
+
+  export function isLegendSeries(item: LegendItem | LegendGroup | LegendSeries | LegendPrimitive): item is LegendSeries {
+    return (item as LegendSeries).seriesType !== undefined;
+}

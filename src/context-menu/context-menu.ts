@@ -352,11 +352,11 @@ export class ContextMenu {
     this.div.style.zIndex = "1000";
     this.div.style.left = `${x}px`;
     this.div.style.top = `${y}px`;
-    this.div.style.width = "225px";
+    this.div.style.width = "250px";
     this.div.style.maxHeight = `400px`;
-    this.div.style.overflowY = "scroll";
+    this.div.style.overflowY = "hidden";
     this.div.style.display = "block";
-
+    this.div.style.overflowX = "hidden"
     console.log("Displaying Menu at:", x, y);
 
     activeMenu = this.div;
@@ -414,20 +414,16 @@ export class ContextMenu {
     min?: number,
     max?: number
   ): HTMLElement {
-    return this.addMenuInput(
-      this.div,
-      {
-        type: "number",
-        label,
-        value: defaultValue,
-        onChange,
-        min,
-        max,
-      },
-      ""
-    );
+    return this.addMenuInput(this.div, {
+      type: "number",
+      label,
+      value: defaultValue,
+      onChange,
+      min,
+      max,
+    });
   }
-
+  
   private addCheckbox(
     label: string,
     defaultValue: boolean,
@@ -440,165 +436,276 @@ export class ContextMenu {
       onChange,
     });
   }
-
+  
+  private addSelectInput(
+    label: string,
+    currentValue: string,
+    options: string[],
+    onSelectChange: (newValue: string) => void
+  ): HTMLElement {
+    return this.addMenuInput(this.div, {
+      type: "select",
+      label,
+      value: currentValue,
+      onChange: onSelectChange,
+      options,
+    });
+  }
+  
   private addMenuInput(
     parent: HTMLElement,
     config: {
-      type: "string" | "color" | "number" | "boolean" | "select";
+      type: "string" | "color" | "number" | "boolean" | "select" | "hybrid";
       label: string;
-      value: any;
-      onChange: (newValue: any) => void;
+      value?: any;
+      onChange?: (newValue: any) => void;
       action?: () => void;
       min?: number;
       max?: number;
       options?: string[];
+      hybridConfig?: {
+        defaultAction: () => void;
+        options: { name: string; action: () => void }[];
+      };
     },
     idPrefix: string = ""
   ): HTMLElement {
-    let item: HTMLElement;
+    const container = document.createElement("div");
+    container.classList.add("context-menu-item");
+    container.style.display = "flex";
+    container.style.alignItems = "center";
+    container.style.justifyContent = "space-around";
+    container.style.width = "90%";
 
-    if (
-      config.type === "number" ||
-      config.type === "string" ||
-      config.type === "boolean"
-    ) {
-      item = document.createElement("div");
-      item.classList.add("context-menu-item");
-      item.style.display = "flex";
-      item.style.alignItems = "center";
-      item.style.justifyContent = "space-between";
+    if (config.label) {
+      const labelElem = document.createElement("label");
+      labelElem.innerText = config.label;
+      labelElem.htmlFor = `${idPrefix}${config.label.toLowerCase()}`;
+      labelElem.style.flex = "0.8";
+      labelElem.style.whiteSpace = "nowrap";
+      container.appendChild(labelElem);
+    }
+  
+    let inputElem: HTMLElement;
+  
+    switch (config.type) {
+      case "hybrid": {
+        if (!config.hybridConfig) {
+          throw new Error("Hybrid type requires hybridConfig.");
+        }
+      
+        // Create the hybrid container (acts as a button and contains the dropdown)
+        const hybridContainer = document.createElement("div");
+        hybridContainer.classList.add("context-menu-item");
+        hybridContainer.style.position = "relative";
+        hybridContainer.style.padding = "4px 8px"; // Consistent padding
+        hybridContainer.style.cursor = "pointer";
+        hybridContainer.style.display = "flex";
+        hybridContainer.style.alignItems = "center";
+        hybridContainer.style.justifyContent = "space-between";
+      
+        // Add the label
+        const labelElem = document.createElement("span");
+        labelElem.innerText = config.label || "Action";
+        labelElem.style.flex = "1";
+        hybridContainer.appendChild(labelElem);
+      
+        // Dropdown indicator (▼)
+        const dropdownIndicator = document.createElement("span");
+        dropdownIndicator.innerText = "▼";
+        dropdownIndicator.style.marginLeft = "8px";
+        dropdownIndicator.style.marginRight = "4px";
 
-      if (config.label) {
-        const label = document.createElement("label");
-        label.innerText = config.label;
-        label.htmlFor = `${idPrefix}${config.label.toLowerCase()}`;
-        label.style.marginRight = "8px";
-        item.appendChild(label);
+        dropdownIndicator.style.color = "#fff";
+        hybridContainer.appendChild(dropdownIndicator);
+      
+        // Attach the default action to the container click
+        hybridContainer.addEventListener("click", () => {
+          config.hybridConfig!.defaultAction();
+        });
+      
+        // Dropdown menu
+        const dropdown = document.createElement("div");
+        dropdown.style.position = "absolute";
+        dropdown.style.top = "100%";
+        dropdown.style.left = "0";
+        dropdown.style.backgroundColor = "#2b2b2b";
+        dropdown.style.color = "#fff";
+        dropdown.style.border = "1px solid #444";
+        dropdown.style.borderRadius = "4px";
+        dropdown.style.minWidth = "100px";
+        dropdown.style.boxShadow = "0px 2px 5px rgba(0, 0, 0, 0.5)";
+        dropdown.style.zIndex = "1000"; // Ensure it overlays other elements
+        dropdown.style.display = "none";
+      
+        // Populate dropdown options
+        config.hybridConfig.options.forEach((option) => {
+          const optionElem = document.createElement("div");
+          optionElem.innerText = option.name;
+          optionElem.style.padding = "8px";
+          optionElem.style.cursor = "pointer";
+      
+          optionElem.addEventListener("click", (event) => {
+            event.stopPropagation(); // Prevent triggering the default action
+            dropdown.style.display = "none";
+            option.action();
+          });
+      
+          optionElem.addEventListener("mouseenter", () => {
+            optionElem.style.backgroundColor = "#444";
+          });
+      
+          optionElem.addEventListener("mouseleave", () => {
+            optionElem.style.backgroundColor = "#2b2b2b";
+          });
+      
+          dropdown.appendChild(optionElem);
+        });
+      
+        hybridContainer.appendChild(dropdown);
+      
+        // Toggle dropdown visibility on click of the dropdown indicator
+        dropdownIndicator.addEventListener("click", (event) => {
+          event.stopPropagation(); // Prevent triggering the default action
+          dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
+        });
+      
+        // Close dropdown on outside click
+        document.addEventListener("click", () => {
+          dropdown.style.display = "none";
+        });
+      
+        inputElem = hybridContainer;
+        break;
       }
-
-      let input: HTMLInputElement;
-
-      if (config.type === "number") {
-        input = document.createElement("input");
+      
+  
+      case "number": {
+        const input = document.createElement("input");
         input.type = "number";
         input.value = config.value !== undefined ? config.value.toString() : "";
-        input.style.width = "45px";
-        input.style.marginLeft = "auto";
-        input.style.cursor = "pointer";
+        input.style.backgroundColor = "#2b2b2b"; // Darker gray background
+        input.style.color = "#fff"; // White text
+        input.style.border = "1px solid #444"; // Subtle border
+        input.style.borderRadius = "4px";
+        input.style.textAlign = "center"; 
 
-        if (config.min !== undefined) {
-          input.min = config.min.toString();
-        }
-        if (config.max !== undefined) {
-          input.max = config.max.toString();
-        }
+        input.style.marginLeft = "auto"; // Adds margin to the right of the input
 
+        input.style.marginRight = "8px"; // Adds margin to the right of the input
+        input.style.width = "40px"; // Ensures a consistent width
+        if (config.min !== undefined) input.min = config.min.toString();
+        if (config.max !== undefined) input.max = config.max.toString();
+  
         input.addEventListener("input", (event) => {
           const target = event.target as HTMLInputElement;
           let newValue: number = parseFloat(target.value);
-          const optionName = config.label;
-          const constraints = this.constraints[optionName.toLowerCase()];
-
-          if (constraints && !constraints.skip) {
-            if (constraints.min !== undefined && newValue < constraints.min) {
-              newValue = constraints.min;
-              input.value = newValue.toString();
-            }
-            if (constraints.max !== undefined && newValue > constraints.max) {
-              newValue = constraints.max;
-              input.value = newValue.toString();
-            }
-          }
-
           if (!isNaN(newValue)) {
-            config.onChange(newValue);
+            config.onChange!(newValue);
           }
         });
-
-        item.appendChild(input);
-      } else if (config.type === "boolean") {
-        input = document.createElement("input");
+  
+        inputElem = input;
+        break;
+      }
+  
+      case "boolean": {
+        const input = document.createElement("input");
         input.type = "checkbox";
         input.checked = config.value ?? false;
         input.style.marginLeft = "auto";
-        input.style.cursor = "pointer";
-
+        input.style.marginRight = "8px";
         input.addEventListener("change", (event) => {
           const target = event.target as HTMLInputElement;
-          config.onChange(target.checked);
+          config.onChange!(target.checked);
         });
+  
+        inputElem = input;
+        break;
+      }
+  
+      case "select": {
+        const select = document.createElement("select");
+        select.id = `${idPrefix}${
+          config.label ? config.label.toLowerCase() : "select"
+        }`;
+        select.style.backgroundColor = "#2b2b2b"; // Darker gray background
+        select.style.color = "#fff"; // White text
+        select.style.border = "1px solid #444"; // Subtle border
+        select.style.borderRadius = "4px";
+        select.style.marginLeft = "auto";
+        select.style.marginRight = "8px"; // Adds margin to the right of the dropdown
+        select.style.width = "80px"; // Ensures consistent width for dropdown
+        
 
-        item.appendChild(input);
-      } else {
-        input = document.createElement("input");
+        config.options?.forEach((optionValue) => {
+          const option = document.createElement("option");
+          option.value = optionValue;
+          option.text = optionValue;
+          option.style.whiteSpace = "normal"; // Allow wrapping within dropdown
+          option.style.textAlign = "right"
+          if (optionValue === config.value) option.selected = true;
+          select.appendChild(option);
+        });
+  
+        select.addEventListener("change", (event) => {
+          const target = event.target as HTMLSelectElement;
+          config.onChange!(target.value);
+        });
+  
+        inputElem = select;
+        break;
+      }
+  
+      case "string": {
+        const input = document.createElement("input");
         input.type = "text";
         input.value = config.value ?? "";
+        input.style.backgroundColor = "#2b2b2b"; // Darker gray background
+        input.style.color = "#fff"; // White text
+        input.style.border = "1px solid #444"; // Subtle border
+        input.style.borderRadius = "4px";
+        input.style.marginLeft = "auto";
+        input.style.textAlign = "right"
+        input.style.marginRight = "8px"; // Adds margin to the right of the text input
+        input.style.width = "60px"; // Ensures consistent width
+                input.addEventListener("input", (event) => {
+          const target = event.target as HTMLInputElement;
+          config.onChange!(target.value);
+        });
+  
+        inputElem = input;
+        break;
+      }
+  
+      case "color": {
+        const input = document.createElement("input");
+        input.type = "color";
+        input.value = config.value ?? "#000000";
         input.style.marginLeft = "auto";
         input.style.cursor = "pointer";
-
-        input.addEventListener("input", (event) => {
+        input.style.marginRight = "8px"; // Adds margin to the right of the input
+        input.style.width = "100px"; // Ensures a consistent width
+                input.addEventListener("input", (event) => {
           const target = event.target as HTMLInputElement;
-          config.onChange(target.value);
+          config.onChange!(target.value);
         });
-
-        item.appendChild(input);
+  
+        inputElem = input;
+        break;
       }
-    } else if (config.type === "select") {
-      item = document.createElement("div");
-      item.classList.add("context-menu-item");
-      item.style.display = "flex";
-      item.style.alignItems = "center";
-      item.style.justifyContent = "space-between";
-
-      if (config.label) {
-        const label = document.createElement("label");
-        label.innerText = config.label;
-        label.htmlFor = `${idPrefix}${config.label.toLowerCase()}`;
-        label.style.marginRight = "8px";
-        item.appendChild(label);
-      }
-
-      const select = document.createElement("select");
-      select.id = `${idPrefix}${
-        config.label ? config.label.toLowerCase() : "select"
-      }`;
-      select.style.marginLeft = "auto";
-      select.style.cursor = "pointer";
-
-      config.options?.forEach((optionValue) => {
-        const option = document.createElement("option");
-        option.value = optionValue;
-        option.text = optionValue;
-        if (optionValue === config.value) {
-          option.selected = true;
-        }
-        select.appendChild(option);
-      });
-
-      select.addEventListener("change", (event) => {
-        const target = event.target as HTMLSelectElement;
-        if (config.onChange) {
-          config.onChange(target.value);
-        }
-      });
-
-      item.appendChild(select);
-    } else {
-      item = document.createElement("span");
-      item.classList.add("context-menu-item");
-      item.innerText = config.label || "Action";
-      item.style.cursor = "pointer";
-
-      item.addEventListener("click", (event) => {
-        event.stopPropagation();
-        config.action && config.action();
-      });
+  
+      default:
+        throw new Error("Unsupported input type");
     }
-
-    parent.appendChild(item);
-    return item;
+    //inputElem.style.padding= "2px 10px 2px 10px";
+    container.style.padding= "2px 10px 2px 10px";
+    container.appendChild(inputElem);
+    parent.appendChild(container);
+    return container;
   }
-
+  
+  
   private addMenuItem(
     text: string,
     action: () => void,
@@ -638,7 +745,7 @@ export class ContextMenu {
         const selectedArrow = arrows[randomIndex];
         hoverArrow.innerText = selectedArrow;
         hoverArrow.style.marginLeft = "auto";
-        hoverArrow.style.fontSize = "14px";
+        hoverArrow.style.fontSize = "8px";
         hoverArrow.style.color = "white";
         item.appendChild(hoverArrow);
       }
@@ -1185,31 +1292,63 @@ otherOptions.forEach((option) => {
 
     this.showMenu(event);
   }
-
   private populateLayoutMenu(event: MouseEvent): void {
+    // Clear the menu
     this.div.innerHTML = "";
-    const layoutOptions = { name: "Text Color", valuePath: "layout.textColor" };
-    const initialColor =
-      (this.getCurrentOptionValue(layoutOptions.valuePath) as string) ||
+  
+    // Text Color Option
+    const textColorOption = { name: "Text Color", valuePath: "layout.textColor" };
+    const initialTextColor =
+      (this.getCurrentOptionValue(textColorOption.valuePath) as string) ||
       "#000000";
-
-    // Layout text color
+  
     this.addColorPickerMenuItem(
-      camelToTitle(layoutOptions.name),
-      initialColor,
-      layoutOptions.valuePath,
+      camelToTitle(textColorOption.name),
+      initialTextColor,
+      textColorOption.valuePath,
       this.handler.chart
     );
-
-    // If you intended to show a background menu with "Type & Colors" and "Options":
-    // Call populateBackgroundMenu, not populateBackgroundOptionsMenu directly.
+  
+    // Background Color Options Based on Current Background Type
+    const currentBackground = this.handler.chart.options().layout?.background;
+  
+    if (isSolidColor(currentBackground)) {
+      // Solid Background Color
+      this.addColorPickerMenuItem(
+        "Background Color",
+        currentBackground.color || "#FFFFFF",
+        "layout.background.color",
+        this.handler.chart
+      );
+    } else if (isVerticalGradientColor(currentBackground)) {
+      // Gradient Background Colors
+      this.addColorPickerMenuItem(
+        "Top Color",
+        currentBackground.topColor || "rgba(255,0,0,0.33)",
+        "layout.background.topColor",
+        this.handler.chart
+      );
+      this.addColorPickerMenuItem(
+        "Bottom Color",
+        currentBackground.bottomColor || "rgba(0,255,0,0.33)",
+        "layout.background.bottomColor",
+        this.handler.chart
+      );
+    } else {
+      console.warn("Unknown background type; no color options displayed.");
+    }
+  
+    // Switch Background Type Option
     this.addMenuItem(
-      "Background Options",
-      () => this.populateBackgroundMenu(event),
+      "Switch Background Type",
+      () => {
+        this.toggleBackgroundType(event);
+      },
       false,
       true
     );
-
+  
+    // Back to Main Menu Option
     this.addMenuItem(
       "⤝ Main Menu",
       () => {
@@ -1218,9 +1357,36 @@ otherOptions.forEach((option) => {
       false,
       false
     );
-
+  
+    // Display the updated menu
     this.showMenu(event);
   }
+  
+  private toggleBackgroundType(event: MouseEvent): void {
+    const currentBackground = this.handler.chart.options().layout?.background;
+    let updatedBackground: Background;
+  
+    // Toggle between Solid and Vertical Gradient
+    if (isSolidColor(currentBackground)) {
+      updatedBackground = {
+        type: ColorType.VerticalGradient,
+        topColor: "rgba(255,0,0,0.33)",
+        bottomColor: "rgba(0,255,0,0.33)",
+      };
+    } else {
+      updatedBackground = {
+        type: ColorType.Solid,
+        color: "#000000",
+      };
+    }
+  
+    // Apply the updated background type
+    this.handler.chart.applyOptions({ layout: { background: updatedBackground } });
+  
+    // Repopulate the Layout Menu with the new background type's options
+    this.populateLayoutMenu(event);
+  }
+  
   private populateWidthMenu(event: MouseEvent, series: ISeriesApi<any>): void {
     this.div.innerHTML = ""; // Clear current menu
 
@@ -1329,74 +1495,48 @@ private populateLineTypeMenu(
 
 
 
-  private addTextInput(
-    label: string,
-    defaultValue: string,
-    onChange: (value: string) => void
-  ): HTMLElement {
-    const container = document.createElement("div");
-    container.classList.add("context-menu-item");
-    container.style.display = "flex";
-    container.style.alignItems = "center";
-    container.style.justifyContent = "space-between";
+private addTextInput(
+  label: string,
+  defaultValue: string,
+  onChange: (value: string) => void
+): HTMLElement {
+  const container = document.createElement("div");
+  container.classList.add("context-menu-item");
+  container.style.display = "flex";
+  container.style.alignItems = "center";
+  container.style.justifyContent = "space-between";
 
-    const labelElem = document.createElement("label");
-    labelElem.innerText = label;
-    labelElem.htmlFor = `${label.toLowerCase()}-input`;
-    labelElem.style.marginRight = "8px";
-    container.appendChild(labelElem);
+  const labelElem = document.createElement("label");
+  labelElem.innerText = label;
+  labelElem.htmlFor = `${label.toLowerCase()}-input`;
+  labelElem.style.marginRight = "8px";
+  labelElem.style.flex = "1"; // Ensure the label takes up available space
+  container.appendChild(labelElem);
 
-    const input = document.createElement("input");
-    input.type = "text";
-    input.value = defaultValue;
-    input.id = `${label.toLowerCase()}-input`;
-    input.style.flex = "1";
-    input.style.marginLeft = "auto";
-    input.style.cursor = "pointer";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = defaultValue;
+  input.id = `${label.toLowerCase()}-input`;
+  input.style.flex = "0 0 100px"; // Fixed width for input
+  input.style.marginLeft = "auto"; // Right-align
+  input.style.backgroundColor = "#2b2b2b"; // Darker gray background
+  input.style.color = "#fff"; // White text color for contrast
+  input.style.border = "1px solid #444"; // Subtle border
+  input.style.borderRadius = "4px";
+  input.style.cursor = "pointer";
 
-    input.addEventListener("input", (event) => {
-      const target = event.target as HTMLInputElement;
-      onChange(target.value);
-    });
+  input.addEventListener("input", (event) => {
+    const target = event.target as HTMLInputElement;
+    onChange(target.value);
+  });
 
-    container.appendChild(input);
+  container.appendChild(input);
 
-    this.div.appendChild(container);
+  this.div.appendChild(container);
 
-    return container;
-  }
+  return container;
+}
 
-  private addSelectInput(
-    label: string,
-    currentValue: string,
-    options: string[],
-    onSelectChange: (newValue: string) => void
-  ): void {
-    const selectContainer = document.createElement("div");
-    selectContainer.className = "menu-item select-input";
-
-    const selectLabel = document.createElement("span");
-    selectLabel.innerText = label;
-    selectContainer.appendChild(selectLabel);
-
-    const selectField = document.createElement("select");
-    options.forEach((option) => {
-      const optionElement = document.createElement("option");
-      optionElement.value = option;
-      optionElement.text = option;
-      if (option === currentValue) {
-        optionElement.selected = true;
-      }
-      selectField.appendChild(optionElement);
-    });
-    selectField.addEventListener("change", (e) => {
-      const newValue = (e.target as HTMLSelectElement).value;
-      onSelectChange(newValue);
-    });
-    selectContainer.appendChild(selectField);
-
-    this.div.appendChild(selectContainer);
-  }
 
   private populateColorOptionsMenu(
     colorOptions: { label: string; value: string }[],
@@ -1544,24 +1684,87 @@ private populateLineTypeMenu(
   
 
   private populateGridMenu(event: MouseEvent): void {
-    this.div.innerHTML = "";
-
+    this.div.innerHTML = ""; // Clear the menu
+  
+    // Configuration for grid options
     const gridOptions = [
-      { name: "Vertical Grid Color", valuePath: "grid.vertLines.color" },
-      { name: "Horizontal Grid Color", valuePath: "grid.horzLines.color" },
+      {
+        name: "Vertical Line Color",
+        type: "color",
+        valuePath: "grid.vertLines.color",
+        defaultValue: "#D6DCDE",
+      },
+      {
+        name: "Horizontal Line Color",
+        type: "color",
+        valuePath: "grid.horzLines.color",
+        defaultValue: "#D6DCDE",
+      },
+      {
+        name: "Vertical Line Style",
+        type: "select",
+        valuePath: "grid.vertLines.style",
+        options: ["Solid", "Dashed", "Dotted", "LargeDashed"],
+        defaultValue: "Solid",
+      },
+      {
+        name: "Horizontal Line Style",
+        type: "select",
+        valuePath: "grid.horzLines.style",
+        options: ["Solid", "Dashed", "Dotted", "LargeDashed"],
+        defaultValue: "Solid",
+      },
+      {
+        name: "Show Vertical Lines",
+        type: "boolean",
+        valuePath: "grid.vertLines.visible",
+        defaultValue: true,
+      },
+      {
+        name: "Show Horizontal Lines",
+        type: "boolean",
+        valuePath: "grid.horzLines.visible",
+        defaultValue: true,
+      },
     ];
-
+  
+    // Iterate over the grid options and dynamically add inputs
     gridOptions.forEach((option) => {
-      const initialColor =
-        (this.getCurrentOptionValue(option.valuePath) as string) || "#FFFFFF";
-      this.addColorPickerMenuItem(
-        camelToTitle(option.name),
-        initialColor,
-        option.valuePath,
-        this.handler.chart
-      );
+      const currentValue = this.getCurrentOptionValue(option.valuePath) ?? option.defaultValue;
+  
+      if (option.type === "color") {
+        this.addColorPickerMenuItem(
+          camelToTitle(option.name),
+          currentValue,
+          option.valuePath,
+          this.handler.chart
+        );
+      } else if (option.type === "select") {
+        this.addSelectInput(
+          camelToTitle(option.name),
+          currentValue,
+          option.options!,
+          (newValue) => {
+            const selectedIndex = option.options!.indexOf(newValue);
+            const updatedOptions = buildOptions(option.valuePath!, selectedIndex);
+            this.handler.chart.applyOptions(updatedOptions);
+            console.log(`Updated ${option.name} to: ${newValue}`);
+          }
+        );
+      } else if (option.type === "boolean") {
+        this.addCheckbox(
+          camelToTitle(option.name),
+          currentValue,
+          (newValue) => {
+            const updatedOptions = buildOptions(option.valuePath!, newValue);
+            this.handler.chart.applyOptions(updatedOptions);
+            console.log(`Updated ${option.name} to: ${newValue}`);
+          }
+        );
+      }
     });
-
+  
+    // Back to Main Menu
     this.addMenuItem(
       "⤝ Main Menu",
       () => {
@@ -1569,9 +1772,10 @@ private populateLineTypeMenu(
       },
       false
     );
-
-    this.showMenu(event);
+  
+    this.showMenu(event); // Display the updated menu
   }
+  
 
   private populateBackgroundMenu(event: MouseEvent): void {
     this.div.innerHTML = "";
@@ -1697,8 +1901,9 @@ private populateLineTypeMenu(
   }
 
   private populateTimeScaleMenu(event: MouseEvent): void {
-    this.div.innerHTML = "";
-
+    this.div.innerHTML = ""; // Clear current menu
+  
+    // TimeScaleOptions configuration
     const timeScaleOptions = [
       {
         name: "Right Offset",
@@ -1715,9 +1920,36 @@ private populateLineTypeMenu(
         max: 100,
       },
       {
+        name: "Min Bar Spacing",
+        type: "number",
+        valuePath: "timeScale.minBarSpacing",
+        min: 0.1,
+        max: 10,
+      },
+      {
         name: "Fix Left Edge",
         type: "boolean",
         valuePath: "timeScale.fixLeftEdge",
+      },
+      {
+        name: "Fix Right Edge",
+        type: "boolean",
+        valuePath: "timeScale.fixRightEdge",
+      },
+      {
+        name: "Lock Visible Range on Resize",
+        type: "boolean",
+        valuePath: "timeScale.lockVisibleTimeRangeOnResize",
+      },
+      {
+        name: "Visible",
+        type: "boolean",
+        valuePath: "timeScale.visible",
+      },
+      {
+        name: "Border Visible",
+        type: "boolean",
+        valuePath: "timeScale.borderVisible",
       },
       {
         name: "Border Color",
@@ -1725,7 +1957,8 @@ private populateLineTypeMenu(
         valuePath: "timeScale.borderColor",
       },
     ];
-
+  
+    // Iterate over options and dynamically add inputs based on type
     timeScaleOptions.forEach((option) => {
       if (option.type === "number") {
         const currentValue = this.getCurrentOptionValue(
@@ -1757,8 +1990,7 @@ private populateLineTypeMenu(
         );
       } else if (option.type === "color") {
         const currentColor =
-          (this.getCurrentOptionValue(option.valuePath!) as string) ||
-          "#000000";
+          (this.getCurrentOptionValue(option.valuePath!) as string) || "#000000";
         this.addColorPickerMenuItem(
           camelToTitle(option.name),
           currentColor,
@@ -1767,9 +1999,8 @@ private populateLineTypeMenu(
         );
       }
     });
-
-    this.showMenu(event);
-
+  
+    // Back to Main Menu
     this.addMenuItem(
       "⤝ Main Menu",
       () => {
@@ -1777,26 +2008,118 @@ private populateLineTypeMenu(
       },
       false
     );
+  
+    this.showMenu(event); // Display the updated menu
   }
-
+  
   private populatePriceScaleMenu(
     event: MouseEvent,
-    priceScaleId: "left" | "right" = "right"
+    priceScaleId: "left" | "right" = "right",
+    series?: ISeriesApi<any>
   ): void {
-    this.div.innerHTML = "";
-
-
-
-    this.addMenuItem(
-      "Set Price Scale Mode",
-      () => {
-        this.populatePriceScaleModeMenu(event, priceScaleId);
-      },
-      true,
-      true,
-      1
+    this.div.innerHTML = ""; // Clear current menu
+  
+    if (series) {
+      // Option to switch the price scale for the series
+      this.addMenuItem(
+        "Switch Series Price Scale",
+        () => {
+          const newPriceScaleId = priceScaleId === "left" ? "right" : "left";
+          series.applyOptions({ priceScaleId: newPriceScaleId });
+          console.log(`Series price scale switched to: ${newPriceScaleId}`);
+          this.populatePriceScaleMenu(event, newPriceScaleId, series);
+        },
+        false,
+        false
+      );
+    }
+  
+    // Dropdown for Price Scale Mode
+    const currentMode: PriceScaleMode =
+      this.handler.chart.priceScale(priceScaleId).options().mode ?? PriceScaleMode.Normal;
+  
+    const modeOptions: { label: string; value: PriceScaleMode }[] = [
+      { label: "Normal", value: PriceScaleMode.Normal },
+      { label: "Logarithmic", value: PriceScaleMode.Logarithmic },
+      { label: "Percentage", value: PriceScaleMode.Percentage },
+      { label: "Indexed To 100", value: PriceScaleMode.IndexedTo100 },
+    ];
+  
+    const modeLabels = modeOptions.map((opt) => opt.label);
+  
+    this.addSelectInput(
+      "Price Scale Mode",
+      modeOptions.find((opt) => opt.value === currentMode)?.label || "Normal", // Current value label
+      modeLabels, // Dropdown options (labels)
+      (newLabel: string) => {
+        const selectedOption = modeOptions.find((opt) => opt.label === newLabel);
+        if (selectedOption) {
+          this.applyPriceScaleOptions(priceScaleId, { mode: selectedOption.value });
+          console.log(`Price scale (${priceScaleId}) mode set to: ${newLabel}`);
+          this.populatePriceScaleMenu(event, priceScaleId, series); // Refresh the menu
+        }
+      }
     );
-
+  
+    // Additional Price Scale Options
+    const options = this.handler.chart.priceScale(priceScaleId).options();
+    const additionalOptions = [
+      {
+        name: "Auto Scale",
+        value: options.autoScale ?? true,
+        action: (newValue: boolean) => {
+          this.applyPriceScaleOptions(priceScaleId, { autoScale: newValue });
+          console.log(`Price scale (${priceScaleId}) autoScale set to: ${newValue}`);
+        },
+      },
+      {
+        name: "Invert Scale",
+        value: options.invertScale ?? false,
+        action: (newValue: boolean) => {
+          this.applyPriceScaleOptions(priceScaleId, { invertScale: newValue });
+          console.log(`Price scale (${priceScaleId}) invertScale set to: ${newValue}`);
+        },
+      },
+      {
+        name: "Align Labels",
+        value: options.alignLabels ?? true,
+        action: (newValue: boolean) => {
+          this.applyPriceScaleOptions(priceScaleId, { alignLabels: newValue });
+          console.log(`Price scale (${priceScaleId}) alignLabels set to: ${newValue}`);
+        },
+      },
+      {
+        name: "Border Visible",
+        value: options.borderVisible ?? true,
+        action: (newValue: boolean) => {
+          this.applyPriceScaleOptions(priceScaleId, { borderVisible: newValue });
+          console.log(`Price scale (${priceScaleId}) borderVisible set to: ${newValue}`);
+        },
+      },
+      {
+        name: "Ticks Visible",
+        value: options.ticksVisible ?? false,
+        action: (newValue: boolean) => {
+          this.applyPriceScaleOptions(priceScaleId, { ticksVisible: newValue });
+          console.log(`Price scale (${priceScaleId}) ticksVisible set to: ${newValue}`);
+        },
+      },
+    ];
+  
+    additionalOptions.forEach((opt) => {
+      this.addMenuItem(
+        `${opt.name}: ${opt.value ? "On" : "Off"}`,
+        () => {
+          const newValue = !opt.value; // Toggle the current value
+          opt.action(newValue);
+          this.populatePriceScaleMenu(event, priceScaleId, series); // Refresh the menu
+        },
+        false,
+        false
+      );
+    });
+  
+    // Back to Main Menu
     this.addMenuItem(
       "⤝ Main Menu",
       () => {
@@ -1804,58 +2127,10 @@ private populateLineTypeMenu(
       },
       false
     );
-
-    this.showMenu(event);
+  
+    this.showMenu(event); // Display the updated menu
   }
-
-
-
-  private populatePriceScaleModeMenu(
-    event: MouseEvent,
-    priceScaleId: "left" | "right"
-  ): void {
-    this.div.innerHTML = "";
-
-    const currentMode: PriceScaleMode =
-      this.handler.chart.priceScale(priceScaleId).options().mode ??
-      PriceScaleMode.Normal;
-
-    const modeOptions: { name: string; value: PriceScaleMode }[] = [
-      { name: "Normal", value: PriceScaleMode.Normal },
-      { name: "Logarithmic", value: PriceScaleMode.Logarithmic },
-      { name: "Percentage", value: PriceScaleMode.Percentage },
-      { name: "Indexed To 100", value: PriceScaleMode.IndexedTo100 },
-    ];
-
-    modeOptions.forEach((option) => {
-      const isActive = currentMode === option.value;
-
-      this.addMenuItem(
-        option.name,
-        () => {
-          this.applyPriceScaleOptions(priceScaleId, { mode: option.value });
-          this.hideMenu();
-          console.log(
-            `Price scale (${priceScaleId}) mode set to: ${option.name}`
-          );
-        },
-        isActive,
-        false // Not a submenu
-      );
-    });
-
-    this.addMenuItem(
-      "⤝ Back",
-      () => {
-        this.populatePriceScaleMenu(event, priceScaleId);
-      },
-      false, // Not active
-      false, // Not a submenu
-      1 // Add separator space
-    );
-
-    this.showMenu(event);
-  }
+  
 
   private applyPriceScaleOptions(
     priceScaleId: "left" | "right",
@@ -1961,7 +2236,7 @@ private populateLineTypeMenu(
     if (type === ColorType.Solid) {
       updatedBackground = isSolidColor(currentBackground)
         ? { type: ColorType.Solid, color: currentBackground.color }
-        : { type: ColorType.Solid, color: "#FFFFFF" };
+        : { type: ColorType.Solid, color: "#000000" };
     } else if (type === ColorType.VerticalGradient) {
       updatedBackground = isVerticalGradientColor(currentBackground)
         ? {
@@ -1971,8 +2246,8 @@ private populateLineTypeMenu(
           }
         : {
             type: ColorType.VerticalGradient,
-            topColor: "#FFFFFF",
-            bottomColor: "#000000",
+            topColor: "rgba(255,0,0,.33)",
+            bottomColor: "rgba(0,255,0,.33)",
           };
     } else {
       console.error(`Unsupported ColorType: ${type}`);
@@ -2013,7 +2288,7 @@ private populateLineTypeMenu(
             originSeries.primitives["FillArea"] = new FillArea(originSeries, destinationSeries, {
                 ...defaultFillAreaOptions,
             });
-            originSeries.attachPrimitive(originSeries.primitives['FillArea'],"Fill Area")
+            originSeries.attachPrimitive(originSeries.primitives['FillArea'],`Fill Area ⥵ ${destinationSeries.options().title}`,false,true)
             // Attach the FillArea as a primitive
             //if (!originSeries.primitives['FillArea']) {
             //  originSeries.attachPrimitive(originSeries.primitives["FillArea"])
@@ -2110,9 +2385,26 @@ private customizeFillAreaOptions(event: MouseEvent, FillArea: FillArea): void {
 
 
   public addResetViewOption(): void {
-    const resetMenuItem = this.addMenuItem("Reset chart view     ⟲", () => {
-      this.resetView();
-    });
+    const resetMenuItem = this.addMenuInput(this.div, {
+      type: "hybrid",
+      label: "Reset View",
+      hybridConfig: {
+        defaultAction: () => {
+          this.handler.chart.timeScale().resetTimeScale();
+          this.handler.chart.timeScale().fitContent();
+        },
+        options: [
+          {
+            name: "Reset Time Scale Only",
+            action: () => this.handler.chart.timeScale().resetTimeScale(),
+          },
+          {
+            name: "Fit Content Only",
+            action: () => this.handler.chart.timeScale().fitContent(),
+          },
+        ],
+      },
+    })
     this.div.appendChild(resetMenuItem);
   }
 

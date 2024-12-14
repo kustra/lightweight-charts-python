@@ -418,9 +418,11 @@ export class Handler {
         
             const colorsArray = [borderUpColor, borderDownColor];
         
-            const legendSymbolsWithGrouping = chandelierSize > 1 
-                ? legendSymbol.map(symbol => `${symbol} (${chandelierSize})`) 
-                : legendSymbol;
+            const legendSymbolsWithGrouping = legendSymbol.map((symbol, index) => 
+                index === legendSymbol.length - 1 && chandelierSize > 1 
+                    ? `${symbol} (${chandelierSize})` 
+                    : symbol
+            );
         
             const legendItem: LegendItem = {
                 name,
