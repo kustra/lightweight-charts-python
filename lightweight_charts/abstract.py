@@ -388,6 +388,7 @@ class SeriesCommon(Pane):
         """
         min_move = 1 / (10**precision)
         self.run_script(f'''
+        {self.id}.precision = {precision}
         {self.id}.series.applyOptions({{
             priceFormat: {{precision: {precision}, minMove: {min_move}}}
         }})''')
