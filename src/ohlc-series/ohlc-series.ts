@@ -19,12 +19,12 @@ export interface ohlcSeriesOptions
 			CandlestickSeriesOptions,
 			'borderColor'
 		> {
-	radius: (barSpacing: number) => number;
+	radius: number;
 	shape:CandleShape;
-	chandelierSize: number 
-	barSpacing: number 
-	lineStyle: LineStyle
-	lineWidth: LineWidth 
+	chandelierSize: number; 
+	barSpacing: number;
+	lineStyle: LineStyle;
+	lineWidth: LineWidth;
 		}
 	//upperUpColor: string|undefined
 	//upperDownColor: string|undefined
@@ -42,15 +42,12 @@ export const ohlcdefaultOptions: ohlcSeriesOptions = {
 	wickColor: '#737375',
 	wickUpColor: '#26a69a',
 	wickDownColor: '#ef5350',
-	radius: function (bs: number) {
-		if (bs < 4) return 0;
-		return bs / 3;
-	},
-	shape: 'Rectangle' as CandleShape,  // Default shape
+	radius: .6,
+	shape: 'Rounded' as CandleShape,  // Default shape
 	chandelierSize: 1,
 	barSpacing: 0.8,
 	lineStyle: 0 as LineStyle,
-	lineWidth: 1 as  LineWidth
+	lineWidth: 2 as  LineWidth
 
 } as const;
 	//upperUpColor: undefined,

@@ -21,17 +21,14 @@ export class FillArea extends PluginBase implements ISeriesPrimitive<Time> {
     ) {
         super();
     
-        // Default fallback colors
-        const defaultOriginColor = setOpacity('#0000FF',.25); // Blue
-        const defaultDestinationColor = setOpacity('#FF0000',.25); // Red
-    
-        // Use the utility function to check if the series supports `lineColor`
+        // Existing logic for setting colors
+        const defaultOriginColor = setOpacity('#0000FF', 0.25); // Blue
+        const defaultDestinationColor = setOpacity('#FF0000', 0.25); // Red
         const originSeriesColor = hasColorOption(originSeries)
-            ? setOpacity((originSeries.options() as any).lineColor || (originSeries.options() as any).color || defaultOriginColor, 0.3)
+            ? setOpacity((originSeries.options() as any).lineColor || defaultOriginColor, 0.3)
             : setOpacity(defaultOriginColor, 0.3);
-    
         const destinationSeriesColor = hasColorOption(destinationSeries)
-            ? setOpacity((destinationSeries.options() as any).lineColor || (destinationSeries.options() as any).color || defaultDestinationColor, 0.3)
+            ? setOpacity((destinationSeries.options() as any).lineColor || defaultDestinationColor, 0.3)
             : setOpacity(defaultDestinationColor, 0.3);
     
         this.options = {
@@ -45,7 +42,21 @@ export class FillArea extends PluginBase implements ISeriesPrimitive<Time> {
         this._timeIndices = new ClosestTimeIndexFinder([]);
         this._originSeries = originSeries;
         this._destinationSeries = destinationSeries;
+    
+        // Subscribe to data changes in both series
+        this._originSeries.subscribeDataChanged(() => {
+            console.log("Origin series data has changed. Recalculating bands.");
+            this.dataUpdated('full');
+            this.updateAllViews();
+        });
+    
+        this._destinationSeries.subscribeDataChanged(() => {
+            console.log("Destination series data has changed. Recalculating bands.");
+            this.dataUpdated('full');
+            this.updateAllViews();
+        });
     }
+    
     
 
     updateAllViews() {

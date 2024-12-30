@@ -339,7 +339,7 @@ export class ohlcSeriesRenderer<
 			this._aggregator?.aggregate(bars, priceToCoordinate) ?? [];
 
 		// Determine the radius for rounded shapes and candle width based on scaling.
-		const radius = this._options.radius(this._data.barSpacing);
+		const radius = this._options.radius;
 		const { horizontalPixelRatio, verticalPixelRatio } = renderingScope;
 		const candleWidth = this._data.barSpacing * horizontalPixelRatio;
 
@@ -655,40 +655,42 @@ export class ohlcSeriesRenderer<
 		ctx.stroke();
 	}
 
-	/**
-	 * Draws a rounded rectangle-shaped candle.
+		/**
+	 * Draws a rounded rectangle-shaped candle with clamped corner radius.
 	 * @param ctx - The canvas rendering context.
 	 * @param leftSide - The X-coordinate of the left edge of the candle.
 	 * @param rightSide - The X-coordinate of the right edge of the candle.
 	 * @param yCenter - The Y-coordinate of the center of the candle.
 	 * @param candleHeight - The height of the candle in pixels.
-	 * @param radius - The corner radius for the rounded rectangle.
+	 * @param radius - A float from 0..1 that we clamp to an appropriate max.
 	 */
-	private _drawRounded(
-		ctx: CanvasRenderingContext2D,
-		leftSide: number,
-		rightSide: number,
-		yCenter: number,
-		candleHeight: number,
-		radius: number
-	): void {
-		const topEdge = yCenter - candleHeight / 2;
-		const width = rightSide - leftSide;
-		const effectiveRadius = Math.abs(
-			Math.min(radius, 0.1 * Math.min(width, candleHeight), 5)
-		);
-
-		// Begin drawing the rounded rectangle.
-		ctx.beginPath();
-		if (ctx.roundRect) {
-			ctx.roundRect(leftSide, topEdge, width, candleHeight, effectiveRadius);
-		} else {
-			// Fallback to standard rectangle if roundRect is not supported.
-			ctx.rect(leftSide, topEdge, width, candleHeight);
-		}
-		ctx.fill();
-		ctx.stroke();
-	}
+		private _drawRounded(
+			ctx: CanvasRenderingContext2D,
+			leftSide: number,
+			rightSide: number,
+			yCenter: number,
+			candleHeight: number,
+			radius: number
+		  ) {
+			const width = rightSide - leftSide;
+		  
+			// Optionally clamp radius if it's supposed to be 0..1
+			const rawRadius = radius * Math.min(Math.abs(width), Math.abs(candleHeight));
+			const effectiveRadius = Math.abs(Math.min(rawRadius, width / 2, candleHeight / 2));
+		  
+			const topEdge = yCenter - candleHeight / 2;
+		  
+			ctx.beginPath();
+			if (typeof ctx.roundRect === 'function') {
+			  ctx.roundRect(leftSide, topEdge, width, candleHeight, effectiveRadius);
+			} else {
+			  // Fallback: manually draw arcs or just do rect
+			  ctx.rect(leftSide, topEdge, width, candleHeight);
+			}
+			ctx.fill();
+			ctx.stroke();
+		  }
+		  
 
 	/**
 	 * Draws an ellipse-shaped candle.

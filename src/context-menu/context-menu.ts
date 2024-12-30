@@ -1,86 +1,78 @@
+// ----------------------------------
+// External Library Imports
+// ----------------------------------
 import {
-  Background,
+  CandlestickSeriesOptions,
   ColorType,
   IChartApi,
   ISeriesApi,
+  ISeriesPrimitive,
   LineStyle,
   MouseEventParams,
+  PriceScaleMode,
+  PriceScaleOptions,
+
   SeriesType,
   SolidColor,
   VerticalGradientColor,
-  PriceScaleMode,
-  PriceScaleOptions,
-  CandlestickSeriesOptions,
-} from "lightweight-charts";
-import { DrawingTool } from "../drawing/drawing-tool";
-import { ColorPicker as seriesColorPicker } from "./color-picker_";
-import { ColorPicker } from "./color-picker";
+  Background,
+
+} from 'lightweight-charts';
+
+// ----------------------------------
+// Internal Helpers and Types
+// ----------------------------------
+import { cloneSeriesAsType, SupportedSeriesType } from '../helpers/series';
+import {
+  ensureExtendedSeries,
+  isCandleShape,
+  isFillArea,
+  isOHLCData,
+  isSingleValueData,
+  isSolidColor,
+  isVerticalGradientColor,
+} from '../helpers/typeguards';
 import {
   AreaSeriesOptions,
   BarSeriesOptions,
-  LineSeriesOptions,
   ISeriesApiExtended,
-  SeriesOptionsExtended
-} from "../helpers/general";
-import { GlobalParams } from "../general/global-params";
-//import { TooltipPrimitive } from "../tooltip/tooltip";
-import { StylePicker } from "./style-picker";
-import { Drawing } from "../drawing/drawing";
-import { DrawingOptions } from "../drawing/options";
-import { FillArea, defaultFillAreaOptions} from "../fill-area/fill-area";
-import { ensureExtendedSeries, isOHLCData, isSingleValueData, isSolidColor, isVerticalGradientColor } from "../helpers/typeguards";
+  LineSeriesOptions,
+  SeriesOptionsExtended,
+} from '../helpers/general';
 
-import { Handler } from "../general/handler";
-export function buildOptions(optionPath: string, value: any): any {
-  const keys = optionPath.split(".");
-  const options: any = {};
-  let current = options;
+// ----------------------------------
+// General Modules
+// ----------------------------------
+import { GlobalParams } from '../general/global-params';
+import { Handler } from '../general/handler';
 
-  for (let i = 0; i < keys.length; i++) {
-    const key = keys[i];
-    if (i === keys.length - 1) {
-      current[key] = value;
-    } else {
-      current[key] = {};
-      current = current[key];
-    }
-  }
+// ----------------------------------
+// Drawing and Chart Extensions
+// ----------------------------------
+import { DrawingTool } from '../drawing/drawing-tool';
+import { Drawing } from '../drawing/drawing';
+import { DrawingOptions } from '../drawing/options';
+import { FillArea, defaultFillAreaOptions } from '../fill-area/fill-area';
 
-  return options;
-}
+// ----------------------------------
+// UI Components
+// ----------------------------------
+import { ColorPicker } from './color-picker';
+import { ColorPicker as seriesColorPicker } from './color-picker_';
+import { StylePicker } from './style-picker';
 
-// series-types.ts
-export enum SeriesTypeEnum {
-  Line = "Line",
-  Histogram = "Histogram",
-  Area = "Area",
-  Bar = "Bar",
-  Candlestick = "Candlestick",
-}
+// ----------------------------------
+// Specialized Data
+// ----------------------------------
+import { CandleShape } from '../ohlc-series/data';
+import { buildOptions, camelToTitle } from '../helpers/formatting';
 
-export type SupportedSeriesType = keyof typeof SeriesTypeEnum;
+// ----------------------------------
+// If you have actual code referencing commented-out or removed imports,
+// reintroduce them accordingly.
+// ----------------------------------
+
 export let activeMenu: HTMLElement | null = null;
-
-/**
- * Closes the currently active menu.
- */
-export function closeActiveMenu() {
-  if (activeMenu) {
-    activeMenu.style.display = "none";
-    activeMenu = null;
-  }
-}
-
-/**
- * Utility function to convert camelCase to Title Case
- * @param inputString The camelCase string.
- * @returns The Title Case string.
- */
-export function camelToTitle(inputString: string): string {
-  return inputString
-    .replace(/([A-Z])/g, " $1")
-    .replace(/^./, (str) => str.toUpperCase());
-}
 
 interface Item {
   elem: HTMLSpanElement;
@@ -104,19 +96,20 @@ export class ContextMenu {
   ///private Tooltip: TooltipPrimitive | null = null;
   ///private currentTooltipSeries: ISeriesApiExtended | null = null;
 
-  private mouseEventParams: MouseEventParams | null = null;
 
   private constraints: Record<
     string,
     { skip?: boolean; min?: number; max?: number }
   > = {
-    baseline: { skip: true },
-    title: { skip: true },
-    PriceLineSource: { skip: true },
-    tickInterval: { min: 0, max: 100 },
-    lastPriceAnimation: { skip: true },
-    lineType: { min: 0, max: 2 },
-  };
+      baseline: { skip: true },
+      title: { skip: true },
+      PriceLineSource: { skip: true },
+      tickInterval: { min: 0, max: 100 },
+      lastPriceAnimation: { skip: true },
+      lineType: { min: 0, max: 2 },
+      seriesType: { skip: true },
+
+    };
   public setupDrawingTools(saveDrawings: Function, drawingTool: DrawingTool) {
     this.saveDrawings = saveDrawings;
     this.drawingTool = drawingTool;
@@ -174,10 +167,10 @@ export class ContextMenu {
       item.addEventListener(
         "mouseover",
         () =>
-          (timeout = setTimeout(
-            () => action(item.getBoundingClientRect()),
-            100
-          ))
+        (timeout = setTimeout(
+          () => action(item.getBoundingClientRect()),
+          100
+        ))
       );
       item.addEventListener("mouseout", () => clearTimeout(timeout));
     }
@@ -195,7 +188,6 @@ export class ContextMenu {
     document.body.appendChild(this.div);
     this.div.style.overflowY = "scroll";
     this.hoverItem = null;
-    this.mouseEventParams = getMouseEventParams();
     document.body.addEventListener(
       "contextmenu",
       this._onRightClick.bind(this)
@@ -282,7 +274,7 @@ export class ContextMenu {
 
     if (!param.point) {
       console.warn("No point data in MouseEventParams.");
-        return null;
+      return null;
     }
 
     const cursorY = param.point.y;
@@ -297,39 +289,39 @@ export class ContextMenu {
       console.log(`Using referenceSeries for coordinate conversion.`);
     } else {
       console.warn("No handler.series or referenceSeries available.");
-        return null;
+      return null;
     }
 
     const cursorPrice = sourceSeries.coordinateToPrice(cursorY);
     console.log(`Converted chart Y (${cursorY}) to Price: ${cursorPrice}`);
 
     if (cursorPrice === null) {
-        console.warn("Cursor price is null. Unable to determine proximity.");
-        return null;
+      console.warn("Cursor price is null. Unable to determine proximity.");
+      return null;
     }
 
     const seriesByDistance: {
-        distance: number;
+      distance: number;
       series: ISeriesApi<SeriesType>;
     }[] = [];
 
     param.seriesData.forEach((data, series) => {
 
-        let refPrice: number | undefined;
-        if (isSingleValueData(data)) {
-            refPrice = data.value;
-        } else if (isOHLCData(data)) {
-            refPrice = data.close;
-        }
+      let refPrice: number | undefined;
+      if (isSingleValueData(data)) {
+        refPrice = data.value;
+      } else if (isOHLCData(data)) {
+        refPrice = data.close;
+      }
 
-        if (refPrice !== undefined && !isNaN(refPrice)) {
-            const distance = Math.abs(refPrice - cursorPrice);
-            const percentageDifference = (distance / cursorPrice) * 100;
+      if (refPrice !== undefined && !isNaN(refPrice)) {
+        const distance = Math.abs(refPrice - cursorPrice);
+        const percentageDifference = (distance / cursorPrice) * 100;
 
-            if (percentageDifference <= 3.33) {
-                seriesByDistance.push({ distance, series });
-            }
+        if (percentageDifference <= 3.33) {
+          seriesByDistance.push({ distance, series });
         }
+      }
     });
 
     // Sort series by proximity (distance)
@@ -342,7 +334,7 @@ export class ContextMenu {
 
     console.log("No series found within the proximity threshold.");
     return null;
-}
+  }
 
   private showMenu(event: MouseEvent): void {
     const x = event.clientX;
@@ -382,10 +374,7 @@ export class ContextMenu {
     }
   }
 
-  private resetView(): void {
-    this.handler.chart.timeScale().resetTimeScale();
-    this.handler.chart.timeScale().fitContent();
-  }
+
 
   private clearAllMenus() {
     this.handlerMap.forEach((handler) => {
@@ -412,7 +401,8 @@ export class ContextMenu {
     defaultValue: number,
     onChange: (value: number) => void,
     min?: number,
-    max?: number
+    max?: number,
+    step?: number
   ): HTMLElement {
     return this.addMenuInput(this.div, {
       type: "number",
@@ -421,9 +411,10 @@ export class ContextMenu {
       onChange,
       min,
       max,
+      step
     });
   }
-  
+
   private addCheckbox(
     label: string,
     defaultValue: boolean,
@@ -436,7 +427,7 @@ export class ContextMenu {
       onChange,
     });
   }
-  
+
   private addSelectInput(
     label: string,
     currentValue: string,
@@ -451,7 +442,7 @@ export class ContextMenu {
       options,
     });
   }
-  
+
   private addMenuInput(
     parent: HTMLElement,
     config: {
@@ -462,6 +453,7 @@ export class ContextMenu {
       action?: () => void;
       min?: number;
       max?: number;
+      step?: number;
       options?: string[];
       hybridConfig?: {
         defaultAction: () => void;
@@ -485,101 +477,105 @@ export class ContextMenu {
       labelElem.style.whiteSpace = "nowrap";
       container.appendChild(labelElem);
     }
-  
+
     let inputElem: HTMLElement;
-  
+
     switch (config.type) {
       case "hybrid": {
         if (!config.hybridConfig) {
           throw new Error("Hybrid type requires hybridConfig.");
         }
-      
-        // Create the hybrid container (acts as a button and contains the dropdown)
+
         const hybridContainer = document.createElement("div");
         hybridContainer.classList.add("context-menu-item");
         hybridContainer.style.position = "relative";
-        hybridContainer.style.padding = "4px 8px"; // Consistent padding
         hybridContainer.style.cursor = "pointer";
         hybridContainer.style.display = "flex";
-        hybridContainer.style.alignItems = "center";
-        hybridContainer.style.justifyContent = "space-between";
-      
-        // Add the label
+        hybridContainer.style.textAlign = "center";
+        hybridContainer.style.marginLeft = "auto";
+        hybridContainer.style.marginRight = "8px";
+
         const labelElem = document.createElement("span");
-        labelElem.innerText = config.label || "Action";
+        labelElem.innerText = config.label ? "Axis" : "Action";
         labelElem.style.flex = "1";
         hybridContainer.appendChild(labelElem);
-      
-        // Dropdown indicator (▼)
+
         const dropdownIndicator = document.createElement("span");
         dropdownIndicator.innerText = "▼";
         dropdownIndicator.style.marginLeft = "8px";
-        dropdownIndicator.style.marginRight = "4px";
-
         dropdownIndicator.style.color = "#fff";
         hybridContainer.appendChild(dropdownIndicator);
-      
-        // Attach the default action to the container click
-        hybridContainer.addEventListener("click", () => {
-          config.hybridConfig!.defaultAction();
-        });
-      
-        // Dropdown menu
+
         const dropdown = document.createElement("div");
         dropdown.style.position = "absolute";
-        dropdown.style.top = "100%";
-        dropdown.style.left = "0";
         dropdown.style.backgroundColor = "#2b2b2b";
         dropdown.style.color = "#fff";
         dropdown.style.border = "1px solid #444";
         dropdown.style.borderRadius = "4px";
         dropdown.style.minWidth = "100px";
         dropdown.style.boxShadow = "0px 2px 5px rgba(0, 0, 0, 0.5)";
-        dropdown.style.zIndex = "1000"; // Ensure it overlays other elements
+        dropdown.style.zIndex = "1000";
         dropdown.style.display = "none";
-      
-        // Populate dropdown options
+        hybridContainer.appendChild(dropdown);
+
+        // Populate dropdown with options
         config.hybridConfig.options.forEach((option) => {
           const optionElem = document.createElement("div");
           optionElem.innerText = option.name;
-          optionElem.style.padding = "8px";
           optionElem.style.cursor = "pointer";
-      
+          optionElem.style.padding = "5px 10px";
+
+          // Handle clicks on the dropdown options
           optionElem.addEventListener("click", (event) => {
-            event.stopPropagation(); // Prevent triggering the default action
-            dropdown.style.display = "none";
-            option.action();
+            event.stopPropagation(); // Prevent propagation to the container
+            dropdown.style.display = "none"; // Close dropdown
+            option.action(); // Execute the action for the option
           });
-      
+
           optionElem.addEventListener("mouseenter", () => {
             optionElem.style.backgroundColor = "#444";
           });
-      
+
           optionElem.addEventListener("mouseleave", () => {
             optionElem.style.backgroundColor = "#2b2b2b";
           });
-      
+
           dropdown.appendChild(optionElem);
         });
-      
-        hybridContainer.appendChild(dropdown);
-      
-        // Toggle dropdown visibility on click of the dropdown indicator
-        dropdownIndicator.addEventListener("click", (event) => {
+
+        // Clicking the hybrid container toggles the dropdown
+        hybridContainer.addEventListener("click", (event) => {
           event.stopPropagation(); // Prevent triggering the default action
           dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
         });
-      
-        // Close dropdown on outside click
+
+        // Ensure the default action happens when clicking outside the hybrid container
+        const menuItem = document.createElement("div");
+        menuItem.classList.add("context-menu-item");
+        menuItem.style.display = "flex";
+        menuItem.style.alignItems = "center";
+        menuItem.style.justifyContent = "space-between";
+        menuItem.style.cursor = "pointer";
+
+        menuItem.addEventListener("click", () => {
+          config.hybridConfig!.defaultAction(); // Execute the default action
+        });
+
+        // Add the hybrid container to the menu item
+        menuItem.appendChild(hybridContainer);
+
+        // Close dropdown when clicking outside
         document.addEventListener("click", () => {
           dropdown.style.display = "none";
         });
-      
-        inputElem = hybridContainer;
+
+        inputElem = menuItem;
         break;
       }
-      
-  
+
+
+
+
       case "number": {
         const input = document.createElement("input");
         input.type = "number";
@@ -588,15 +584,22 @@ export class ContextMenu {
         input.style.color = "#fff"; // White text
         input.style.border = "1px solid #444"; // Subtle border
         input.style.borderRadius = "4px";
-        input.style.textAlign = "center"; 
+        input.style.textAlign = "center";
 
         input.style.marginLeft = "auto"; // Adds margin to the right of the input
 
         input.style.marginRight = "8px"; // Adds margin to the right of the input
         input.style.width = "40px"; // Ensures a consistent width
+        // Set min/max if provided
         if (config.min !== undefined) input.min = config.min.toString();
         if (config.max !== undefined) input.max = config.max.toString();
-  
+
+        // NEW: Set step if provided, default to 1 if not
+        if (config.step !== undefined && !isNaN(config.step)) {
+          input.step = config.step.toString();
+        } else {
+          input.step = "1"; // Or any other default
+        }
         input.addEventListener("input", (event) => {
           const target = event.target as HTMLInputElement;
           let newValue: number = parseFloat(target.value);
@@ -604,11 +607,11 @@ export class ContextMenu {
             config.onChange!(newValue);
           }
         });
-  
+
         inputElem = input;
         break;
       }
-  
+
       case "boolean": {
         const input = document.createElement("input");
         input.type = "checkbox";
@@ -619,16 +622,15 @@ export class ContextMenu {
           const target = event.target as HTMLInputElement;
           config.onChange!(target.checked);
         });
-  
+
         inputElem = input;
         break;
       }
-  
+
       case "select": {
         const select = document.createElement("select");
-        select.id = `${idPrefix}${
-          config.label ? config.label.toLowerCase() : "select"
-        }`;
+        select.id = `${idPrefix}${config.label ? config.label.toLowerCase() : "select"
+          }`;
         select.style.backgroundColor = "#2b2b2b"; // Darker gray background
         select.style.color = "#fff"; // White text
         select.style.border = "1px solid #444"; // Subtle border
@@ -636,7 +638,7 @@ export class ContextMenu {
         select.style.marginLeft = "auto";
         select.style.marginRight = "8px"; // Adds margin to the right of the dropdown
         select.style.width = "80px"; // Ensures consistent width for dropdown
-        
+
 
         config.options?.forEach((optionValue) => {
           const option = document.createElement("option");
@@ -647,16 +649,16 @@ export class ContextMenu {
           if (optionValue === config.value) option.selected = true;
           select.appendChild(option);
         });
-  
+
         select.addEventListener("change", (event) => {
           const target = event.target as HTMLSelectElement;
           config.onChange!(target.value);
         });
-  
+
         inputElem = select;
         break;
       }
-  
+
       case "string": {
         const input = document.createElement("input");
         input.type = "text";
@@ -666,18 +668,18 @@ export class ContextMenu {
         input.style.border = "1px solid #444"; // Subtle border
         input.style.borderRadius = "4px";
         input.style.marginLeft = "auto";
-        input.style.textAlign = "right"
+        input.style.textAlign = "center"
         input.style.marginRight = "8px"; // Adds margin to the right of the text input
         input.style.width = "60px"; // Ensures consistent width
-                input.addEventListener("input", (event) => {
+        input.addEventListener("input", (event) => {
           const target = event.target as HTMLInputElement;
           config.onChange!(target.value);
         });
-  
+
         inputElem = input;
         break;
       }
-  
+
       case "color": {
         const input = document.createElement("input");
         input.type = "color";
@@ -686,26 +688,26 @@ export class ContextMenu {
         input.style.cursor = "pointer";
         input.style.marginRight = "8px"; // Adds margin to the right of the input
         input.style.width = "100px"; // Ensures a consistent width
-                input.addEventListener("input", (event) => {
+        input.addEventListener("input", (event) => {
           const target = event.target as HTMLInputElement;
           config.onChange!(target.value);
         });
-  
+
         inputElem = input;
         break;
       }
-  
+
       default:
         throw new Error("Unsupported input type");
     }
     //inputElem.style.padding= "2px 10px 2px 10px";
-    container.style.padding= "2px 10px 2px 10px";
+    container.style.padding = "2px 10px 2px 10px";
     container.appendChild(inputElem);
     parent.appendChild(container);
     return container;
   }
-  
-  
+
+
   private addMenuItem(
     text: string,
     action: () => void,
@@ -785,7 +787,7 @@ export class ContextMenu {
    */
   private addColorPickerMenuItem(
     label: string,
-    currentColor: string|null,
+    currentColor: string | null,
     optionPath: string,
     optionTarget: IChartApi | ISeriesApiExtended | any
   ): HTMLElement {
@@ -804,7 +806,7 @@ export class ContextMenu {
     menuItem.addEventListener("click", (event: MouseEvent) => {
       event.stopPropagation();
       if (!this.colorPicker) {
-        this.colorPicker = new seriesColorPicker(currentColor??'#000000', applyColor);
+        this.colorPicker = new seriesColorPicker(currentColor ?? '#000000', applyColor);
       }
       this.colorPicker.openMenu(event, 225, applyColor);
     });
@@ -816,8 +818,8 @@ export class ContextMenu {
   private currentWidthOptions: {
     name: keyof (LineSeriesOptions &
       BarSeriesOptions &
-      AreaSeriesOptions 
-      );
+      AreaSeriesOptions
+    );
     label: string;
     min?: number;
     max?: number;
@@ -827,8 +829,8 @@ export class ContextMenu {
   private currentStyleOptions: {
     name: keyof (LineSeriesOptions &
       BarSeriesOptions &
-      AreaSeriesOptions 
-      );
+      AreaSeriesOptions
+    );
     label: string;
     value: string | number;
     options?: string[];
@@ -842,21 +844,21 @@ export class ContextMenu {
    * @param event - The mouse event triggering the context menu.
    */
 
-  
+
   private populateSeriesMenu(
     series: ISeriesApi<SeriesType> | ISeriesApiExtended,
     event: MouseEvent
   ): void {
     // Type guard to check if series is extended
-    const _series = ensureExtendedSeries(series,this.handler.legend)
-  
+    const _series = ensureExtendedSeries(series, this.handler.legend)
+
     // Now `series` is guaranteed to be extended
     const seriesOptions = series.options() as Partial<
       LineSeriesOptions &
-        BarSeriesOptions &
-        AreaSeriesOptions &
-        CandlestickSeriesOptions &
-        SeriesOptionsExtended
+      BarSeriesOptions &
+      AreaSeriesOptions &
+      CandlestickSeriesOptions &
+      SeriesOptionsExtended
     >;
 
     if (!seriesOptions) {
@@ -874,18 +876,19 @@ export class ContextMenu {
     const tempWidthOptions: {
       name: keyof (LineSeriesOptions &
         BarSeriesOptions &
-        AreaSeriesOptions );
+        AreaSeriesOptions);
       label: string;
       value: number;
       min?: number;
       max?: number;
+      step?: number;
     }[] = [];
 
     const tempStyleOptions: {
       name: keyof (LineSeriesOptions &
         BarSeriesOptions &
-        AreaSeriesOptions 
-        );
+        AreaSeriesOptions
+      );
       label: string;
       value: string | number;
       options?: string[];
@@ -894,15 +897,18 @@ export class ContextMenu {
     for (const optionName of Object.keys(seriesOptions) as Array<
       keyof (LineSeriesOptions &
         BarSeriesOptions &
-        AreaSeriesOptions 
-        )
+        AreaSeriesOptions
+      )
     >) {
       const optionValue = seriesOptions[optionName];
       if (this.shouldSkipOption(optionName)) continue;
       if (optionName.toLowerCase().includes("base")) continue;
 
       const lowerOptionName = camelToTitle(optionName).toLowerCase();
-
+      const isWidthOption =
+        lowerOptionName.includes("width") ||
+        lowerOptionName === "radius" ||
+        lowerOptionName.includes("radius");
       if (lowerOptionName.includes("color")) {
         // Color options
         if (typeof optionValue === "string") {
@@ -912,21 +918,32 @@ export class ContextMenu {
             `Expected string value for color option "${optionName}".`
           );
         }
-      } else if (lowerOptionName.includes("width")) {
-        // Width options
-        // This includes things like lineWidth, priceLineWidth, crosshairMarkerBorderWidth, etc.
-        if (typeof optionValue === "number") {
+      } else if (isWidthOption) {
+        if (typeof optionValue === 'number') {
+          let minVal = 1;
+          let maxVal = 10;
+          let step = 1;
+
+          // If this property is specifically "radius", make it 0..1
+          if (lowerOptionName.includes('radius')) {
+            minVal = 0;
+            maxVal = 1;
+            step = 0.1
+          }
+
+          // Add it to your "width" options array with the specialized range
           tempWidthOptions.push({
             name: optionName,
             label: optionName,
             value: optionValue,
+            min: minVal,
+            max: maxVal,
+            step: step
           });
-        } else {
-          console.warn(
-            `Expected number value for width option "${optionName}".`
-          );
         }
-      } else if (
+      }
+
+      else if (
         lowerOptionName.includes("visible") ||
         lowerOptionName.includes("visibility")
       ) {
@@ -983,12 +1000,24 @@ export class ContextMenu {
             value: optionValue as string,
             options: possibleStyles,
           });
-        } else {
-          console.warn(
-            `Expected string/number value for style-related option "${optionName}".`
-          );
         }
-      } else {
+      }// Example: handle shape if "shape" is in the name
+      else if (lowerOptionName.includes('shape')) {
+        // If we confirm it's a recognized CandleShape
+        if (isCandleShape(optionValue)) {
+          const predefinedShapes = ['Rectangle', 'Rounded', 'Ellipse', 'Arrow', '3d', 'Polygon'];
+          if (predefinedShapes) {
+            tempStyleOptions.push({
+              name: optionName,
+              label: optionName,
+              value: optionValue as CandleShape,  // This is guaranteed CandleShape now
+              options: predefinedShapes,
+            });
+          }
+        }
+      }
+
+      else {
         // Other options go directly to otherOptions
         otherOptions.push({ label: optionName, value: optionValue });
       }
@@ -998,7 +1027,15 @@ export class ContextMenu {
     this.currentWidthOptions = tempWidthOptions;
     this.currentStyleOptions = tempStyleOptions;
 
-   
+    // Inside populateSeriesMenu (already in your code above)
+    this.addMenuItem(
+      "Clone Series ▸",
+      () => {
+        this.populateCloneSeriesMenu(series, event);
+      },
+      false,
+      true
+    );
 
     // Add main menu items only if these arrays have content
     if (visibilityOptions.length > 0) {
@@ -1045,155 +1082,155 @@ export class ContextMenu {
       );
     }
 
-// Add other options dynamically
-otherOptions.forEach((option) => {
-  const optionLabel = camelToTitle(option.label); // Human-readable label
+    // Add other options dynamically
+    otherOptions.forEach((option) => {
+      const optionLabel = camelToTitle(option.label); // Human-readable label
 
-  // Skip if explicitly marked as skippable
-  if (this.constraints[option.label]?.skip) {
-    return;
-  }
+      // Skip if explicitly marked as skippable
+      if (this.constraints[option.label]?.skip) {
+        return;
+      }
 
-  if (typeof option.value === "boolean") {
-    // Add a menu item with a checkbox for boolean options
-    this.addMenuItem(
-      `${optionLabel} ▸`,
-      () => {
-        this.div.innerHTML = ""; // Clear existing menu items
+      if (typeof option.value === "boolean") {
+        // Add a menu item with a checkbox for boolean options
+        this.addMenuItem(
+          `${optionLabel} ▸`,
+          () => {
+            this.div.innerHTML = ""; // Clear existing menu items
 
-        const newValue = !option.value; // Toggle the value
-        const options = buildOptions(option.label, newValue);
-        series.applyOptions(options);
-        console.log(`Toggled ${option.label} to ${newValue}`);
-
-        // Repopulate the menu dynamically
-      },
-      option.value // The checkbox state matches the current value
-    );
-  } else if (typeof option.value === "string") {
-    // Add a submenu or text input for string options
-    const predefinedOptions = this.getPredefinedOptions(option.label);
-
-    if (predefinedOptions && predefinedOptions.length > 0) {
-      this.addMenuItem(
-        `${optionLabel} ▸`,
-        () => {
-          this.div.innerHTML = ""; // Clear existing menu items
-
-          this.addSelectInput(
-            optionLabel,
-            option.value,
-            predefinedOptions,
-            (newValue: string) => {
-              const options = buildOptions(option.label, newValue);
-              series.applyOptions(options);
-              console.log(`Updated ${option.label} to ${newValue}`);
-
-              // Repopulate the menu dynamically
-            }
-          );
-        },
-        false,
-        true // Mark as a submenu
-      );
-    } else {
-      this.addMenuItem(
-        `${optionLabel} ▸`,
-        () => {
-          this.div.innerHTML = ""; // Clear existing menu items
-
-          this.addTextInput(
-            optionLabel,
-            option.value,
-            (newValue: string) => {
-              const options = buildOptions(option.label, newValue);
-              series.applyOptions(options);
-              console.log(`Updated ${option.label} to ${newValue}`);
-
-              // Repopulate the menu dynamically
-            }
-          );
-        },
-        false,
-        true // Mark as a submenu
-      );
-    }
-  } else if (typeof option.value === "number") {
-    // Add a submenu or number input for numeric options
-    const min = this.constraints[option.label]?.min;
-    const max = this.constraints[option.label]?.max;
-
-    this.addMenuItem(
-      `${optionLabel} ▸`,
-      () => {
-        this.div.innerHTML = ""; // Clear existing menu items
-
-        this.addNumberInput(
-          optionLabel,
-          option.value,
-          (newValue: number) => {
+            const newValue = !option.value; // Toggle the value
             const options = buildOptions(option.label, newValue);
             series.applyOptions(options);
-            console.log(`Updated ${option.label} to ${newValue}`);
+            console.log(`Toggled ${option.label} to ${newValue}`);
 
             // Repopulate the menu dynamically
           },
-          min,
-          max
+          option.value // The checkbox state matches the current value
         );
-      },
-      false,
-      true // Mark as a submenu
-    );
-  } else {
-    return; // Skip unsupported data types
-  }
-});
+      } else if (typeof option.value === "string") {
+        // Add a submenu or text input for string options
+        const predefinedOptions = this.getPredefinedOptions(option.label);
+
+        if (predefinedOptions && predefinedOptions.length > 0) {
+          this.addMenuItem(
+            `${optionLabel} ▸`,
+            () => {
+              this.div.innerHTML = ""; // Clear existing menu items
+
+              this.addSelectInput(
+                optionLabel,
+                option.value,
+                predefinedOptions,
+                (newValue: string) => {
+                  const options = buildOptions(option.label, newValue);
+                  series.applyOptions(options);
+                  console.log(`Updated ${option.label} to ${newValue}`);
+
+                  // Repopulate the menu dynamically
+                }
+              );
+            },
+            false,
+            true // Mark as a submenu
+          );
+        } else {
+          this.addMenuItem(
+            `${optionLabel} ▸`,
+            () => {
+              this.div.innerHTML = ""; // Clear existing menu items
+
+              this.addTextInput(
+                optionLabel,
+                option.value,
+                (newValue: string) => {
+                  const options = buildOptions(option.label, newValue);
+                  series.applyOptions(options);
+                  console.log(`Updated ${option.label} to ${newValue}`);
+
+                  // Repopulate the menu dynamically
+                }
+              );
+            },
+            false,
+            true // Mark as a submenu
+          );
+        }
+      } else if (typeof option.value === "number") {
+        // Add a submenu or number input for numeric options
+        const min = this.constraints[option.label]?.min;
+        const max = this.constraints[option.label]?.max;
+
+        this.addMenuItem(
+          `${optionLabel} ▸`,
+          () => {
+            this.div.innerHTML = ""; // Clear existing menu items
+
+            this.addNumberInput(
+              optionLabel,
+              option.value,
+              (newValue: number) => {
+                const options = buildOptions(option.label, newValue);
+                series.applyOptions(options);
+                console.log(`Updated ${option.label} to ${newValue}`);
+
+                // Repopulate the menu dynamically
+              },
+              min,
+              max
+            );
+          },
+          false,
+          true // Mark as a submenu
+        );
+      } else {
+        return; // Skip unsupported data types
+      }
+    });
 
 
     // Add "Fill Area Between" menu option
     this.addMenuItem(
       "Fill Area Between",
       () => {
-          this.startFillAreaBetween(event, _series); // Define the method below
+        this.startFillAreaBetween(event, _series); // Define the method below
       },
       false,
       false
-  );
-
-
-  // Access the primitives
-  const primitives = _series.primitives;
-
-  // Debugging output
-  console.log("Primitives:", primitives);
-
-  // Add "Customize Fill Area" option if `FillArea` is present
-  const hasFillArea = primitives?.FillArea ?? primitives?.pt;
-
-  if (primitives["FillArea"]) {
-    this.addMenuItem(
-      "Customize Fill Area",
-      () => {
-        this.customizeFillAreaOptions(event, hasFillArea);
-      },
-      false,
-      true
     );
-  }
 
-      // Add remaining existing menu items
+
+    // Access the primitives
+    const primitives = _series.primitives;
+
+    // Debugging output
+    console.log("Primitives:", primitives);
+
+    // Add "Customize Fill Area" option if `FillArea` is present
+    const hasFillArea = primitives?.FillArea ?? primitives?.pt;
+
+    if (primitives["FillArea"]) {
       this.addMenuItem(
-        "⤝ Main Menu",
+        "Customize Fill Area",
         () => {
-          this.populateChartMenu(event);
+          this.customizeFillAreaOptions(event, hasFillArea);
         },
         false,
-        false
+        true
       );
-      
-      this.showMenu(event);
     }
+
+    // Add remaining existing menu items
+    this.addMenuItem(
+      "⤝ Main Menu",
+      () => {
+        this.populateChartMenu(event);
+      },
+      false,
+      false
+    );
+
+    this.showMenu(event);
+  }
 
   private populateDrawingMenu(drawing: Drawing, event: MouseEvent): void {
     this.div.innerHTML = ""; // Clear existing menu items
@@ -1239,24 +1276,15 @@ otherOptions.forEach((option) => {
     this.div.innerHTML = "";
     console.log(`Displaying Menu Options: Chart`);
     this.addResetViewOption();
-    //const tooltipLabel = this.globalTooltipEnabled
-    //  ? "Disable Global Tooltip"
-    //  : "Enable Global Tooltip";
-    //this.addMenuItem(tooltipLabel, () => {
-    //  this.globalTooltipEnabled = !this.globalTooltipEnabled;
-//
-    //  if (!this.globalTooltipEnabled) {
-    //    // Detach tooltip from current series
-    //    this.Tooltip?.detached();
-    //  } else {
-    //    // Reattach tooltip to the closest series if applicable
-    //    const series = this.getProximitySeries(this.mouseEventParams!);
-    //    if (series) {
-    //      let _series = ensureExtendedSeries(series, this.handler.legend)
-    //      this.switchTooltipToSeries(_series);
-    //    }
-    //  }
-    //});
+
+    this.addMenuItem(
+      " ~ Series List",
+      () => {
+        this.populateSeriesListMenu(event, false, (destinationSeries: ISeriesApi<SeriesType>) => {
+          this.populateSeriesMenu(destinationSeries, event)
+        })
+      }, false, true
+    );
 
     // Layout menu
     this.addMenuItem(
@@ -1295,23 +1323,23 @@ otherOptions.forEach((option) => {
   private populateLayoutMenu(event: MouseEvent): void {
     // Clear the menu
     this.div.innerHTML = "";
-  
+
     // Text Color Option
     const textColorOption = { name: "Text Color", valuePath: "layout.textColor" };
     const initialTextColor =
       (this.getCurrentOptionValue(textColorOption.valuePath) as string) ||
       "#000000";
-  
+
     this.addColorPickerMenuItem(
       camelToTitle(textColorOption.name),
       initialTextColor,
       textColorOption.valuePath,
       this.handler.chart
     );
-  
+
     // Background Color Options Based on Current Background Type
     const currentBackground = this.handler.chart.options().layout?.background;
-  
+
     if (isSolidColor(currentBackground)) {
       // Solid Background Color
       this.addColorPickerMenuItem(
@@ -1337,7 +1365,7 @@ otherOptions.forEach((option) => {
     } else {
       console.warn("Unknown background type; no color options displayed.");
     }
-  
+
     // Switch Background Type Option
     this.addMenuItem(
       "Switch Background Type",
@@ -1347,7 +1375,7 @@ otherOptions.forEach((option) => {
       false,
       true
     );
-  
+
     // Back to Main Menu Option
     this.addMenuItem(
       "⤝ Main Menu",
@@ -1357,21 +1385,21 @@ otherOptions.forEach((option) => {
       false,
       false
     );
-  
+
     // Display the updated menu
     this.showMenu(event);
   }
-  
+
   private toggleBackgroundType(event: MouseEvent): void {
     const currentBackground = this.handler.chart.options().layout?.background;
     let updatedBackground: Background;
-  
+
     // Toggle between Solid and Vertical Gradient
     if (isSolidColor(currentBackground)) {
       updatedBackground = {
         type: ColorType.VerticalGradient,
-        topColor: "rgba(255,0,0,0.33)",
-        bottomColor: "rgba(0,255,0,0.33)",
+        topColor: "rgba(255,0,0,0.2)",
+        bottomColor: "rgba(0,255,0,0.2)",
       };
     } else {
       updatedBackground = {
@@ -1379,14 +1407,14 @@ otherOptions.forEach((option) => {
         color: "#000000",
       };
     }
-  
+
     // Apply the updated background type
     this.handler.chart.applyOptions({ layout: { background: updatedBackground } });
-  
+
     // Repopulate the Layout Menu with the new background type's options
     this.populateLayoutMenu(event);
   }
-  
+
   private populateWidthMenu(event: MouseEvent, series: ISeriesApi<any>): void {
     this.div.innerHTML = ""; // Clear current menu
 
@@ -1419,123 +1447,153 @@ otherOptions.forEach((option) => {
     this.showMenu(event);
   }
   private populateStyleMenu(event: MouseEvent, series: ISeriesApi<any>): void {
-    this.div.innerHTML = ""; // Clear current menu
-  
+    this.div.innerHTML = ""; // Clear the current menu
+
     this.currentStyleOptions.forEach((option) => {
       const predefinedOptions = this.getPredefinedOptions(option.name);
-  
       if (predefinedOptions) {
-        // Use a dropdown for options with predefined values
         this.addSelectInput(
-          camelToTitle(option.name), // Display a human-readable label
-          option.value.toString(), // Current value of the option
-          predefinedOptions, // Predefined options for the dropdown
+          camelToTitle(option.name),
+          option.value.toString(),
+          predefinedOptions,
           (newValue: string) => {
-            const newVal = predefinedOptions.indexOf(newValue); // Map new value to its index
-            const options = buildOptions(option.name, newVal); // Build the updated options
-            series.applyOptions(options); // Apply the new options to the series
-            console.log(`Updated ${option.name} to ${newValue}`);
+            let finalValue: unknown = newValue;
+
+            // If the option name indicates it's a line style, map string => numeric
+            if (option.name.toLowerCase().includes("style")) {
+              const lineStyleMap: Record<string, number> = {
+                "Solid":         0,
+                "Dotted":        1,
+                "Dashed":        2,
+                "Large Dashed":  3,
+                "Sparse Dotted": 4
+              };
+              finalValue = lineStyleMap[newValue] ?? 0; // fallback to Solid (0)
+            }
+            // If the option name indicates it's a line type, map string => numeric
+            else if (option.name.toLowerCase().includes("linetype")) {
+              const lineTypeMap: Record<string, number> = {
+                "Simple":    0,
+                "WithSteps": 1,
+                "Curved":    2
+              };
+              finalValue = lineTypeMap[newValue] ?? 0; // fallback to Simple (0)
+            }
+
+            // Build the updated options object
+            const updatedOptions = buildOptions(option.name, finalValue);
+            series.applyOptions(updatedOptions);
+            console.log(`Updated ${option.name} to "${newValue}" =>`, finalValue);
           }
         );
+      } else {
+        console.warn(`No predefined options found for "${option.name}".`);
       }
     });
-  
- 
 
+    // Add a Back option
+    this.addMenuItem("⤝ Back", () => {
+      this.populateSeriesMenu(series, event);
+    });
+
+    this.showMenu(event);
+  }
+
+
+
+  private populateCloneSeriesMenu(
+    series: ISeriesApi<SeriesType>,
+    event: MouseEvent
+  ): void {
+    this.div.innerHTML = "";
+
+    // Fetch the current data from the series
+    const data = series.data();
+    // Basic clone targets for any data
+    const cloneOptions: SupportedSeriesType[] = ["Line", "Histogram", "Area"];
+
+    if (data && data.length > 0) {
+      // Check if any bar is recognized as OHLC
+      const hasOHLC = data.some((bar) => isOHLCData(bar));
+      // If so, we push "Bar" and "Candlestick" to the menu
+      if (hasOHLC) {
+        cloneOptions.push("Bar", "Candlestick", "Ohlc");
+      }
+    }
+
+    // Generate the menu items for each clone option
+    cloneOptions.forEach((type) => {
+      this.addMenuItem(
+        `Clone as ${type}`,
+        () => {
+          const clonedSeries = cloneSeriesAsType(series, this.handler, type, {});
+          if (clonedSeries) {
+            console.log(`Cloned series as ${type}:`, clonedSeries);
+          } else {
+            console.warn(`Failed to clone as ${type}.`);
+          }
+        },
+        false
+      );
+    });
+
+    // Back to Series Options
     this.addMenuItem(
-      "⤝ Main Menu",
+      "⤝ Series Options",
       () => {
-        this.populateChartMenu(event);
+        this.populateSeriesMenu(series, event);
       },
+      false,
       false
     );
 
     this.showMenu(event);
   }
-private populateLineTypeMenu(
-  event: MouseEvent,
-  series: ISeriesApi<any>,
-  option: {
-    name: keyof (LineSeriesOptions &
-      BarSeriesOptions &
-      AreaSeriesOptions);
-    label: string;
-    value: string | number;
-    options?: string[];
+
+
+
+
+  private addTextInput(
+    label: string,
+    defaultValue: string,
+    onChange: (value: string) => void
+  ): HTMLElement {
+    const container = document.createElement("div");
+    container.classList.add("context-menu-item");
+    container.style.display = "flex";
+    container.style.alignItems = "center";
+    container.style.justifyContent = "space-between";
+
+    const labelElem = document.createElement("label");
+    labelElem.innerText = label;
+    labelElem.htmlFor = `${label.toLowerCase()}-input`;
+    labelElem.style.marginRight = "8px";
+    labelElem.style.flex = "1"; // Ensure the label takes up available space
+    container.appendChild(labelElem);
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = defaultValue;
+    input.id = `${label.toLowerCase()}-input`;
+    input.style.flex = "0 0 100px"; // Fixed width for input
+    input.style.marginLeft = "auto"; // Right-align
+    input.style.backgroundColor = "#2b2b2b"; // Darker gray background
+    input.style.color = "#fff"; // White text color for contrast
+    input.style.border = "1px solid #444"; // Subtle border
+    input.style.borderRadius = "4px";
+    input.style.cursor = "pointer";
+
+    input.addEventListener("input", (event) => {
+      const target = event.target as HTMLInputElement;
+      onChange(target.value);
+    });
+
+    container.appendChild(input);
+
+    this.div.appendChild(container);
+
+    return container;
   }
-) {
-  this.div.innerHTML = ""; // Clear current menu
-
-  if (!option.options) return;
-
-  // Use the addSelectInput method to add a dropdown
-  this.addSelectInput(
-    option.label, // Label for the dropdown
-    option.value.toString(), // Current value as string
-    option.options, // List of options
-    (newValue: string) => {
-      const newVal = newValue === "Simple" ? 0 : 1; // Map option to value (you can adjust this logic)
-      const options = buildOptions(option.name, newVal);
-      series.applyOptions(options);
-      console.log(`Updated ${option.label} to ${newValue}`);
-    }
-  );
-
-  // Add a "Back" button to navigate to the Style Options menu
-  this.addMenuItem(
-    "⤝ Back to Style Options",
-    () => {
-      this.populateStyleMenu(event, series);
-    },
-    false
-  );
-
-  this.showMenu(event); // Display the menu
-}
-
-
-
-private addTextInput(
-  label: string,
-  defaultValue: string,
-  onChange: (value: string) => void
-): HTMLElement {
-  const container = document.createElement("div");
-  container.classList.add("context-menu-item");
-  container.style.display = "flex";
-  container.style.alignItems = "center";
-  container.style.justifyContent = "space-between";
-
-  const labelElem = document.createElement("label");
-  labelElem.innerText = label;
-  labelElem.htmlFor = `${label.toLowerCase()}-input`;
-  labelElem.style.marginRight = "8px";
-  labelElem.style.flex = "1"; // Ensure the label takes up available space
-  container.appendChild(labelElem);
-
-  const input = document.createElement("input");
-  input.type = "text";
-  input.value = defaultValue;
-  input.id = `${label.toLowerCase()}-input`;
-  input.style.flex = "0 0 100px"; // Fixed width for input
-  input.style.marginLeft = "auto"; // Right-align
-  input.style.backgroundColor = "#2b2b2b"; // Darker gray background
-  input.style.color = "#fff"; // White text color for contrast
-  input.style.border = "1px solid #444"; // Subtle border
-  input.style.borderRadius = "4px";
-  input.style.cursor = "pointer";
-
-  input.addEventListener("input", (event) => {
-    const target = event.target as HTMLInputElement;
-    onChange(target.value);
-  });
-
-  container.appendChild(input);
-
-  this.div.appendChild(container);
-
-  return container;
-}
 
 
   private populateColorOptionsMenu(
@@ -1574,16 +1632,16 @@ private addTextInput(
 
     const seriesOptions = series.options() as Partial<
       LineSeriesOptions &
-        BarSeriesOptions &
-        AreaSeriesOptions 
-        
+      BarSeriesOptions &
+      AreaSeriesOptions
+
     >;
 
     const visibilityOptionNames: Array<
       keyof (LineSeriesOptions &
         BarSeriesOptions &
-        AreaSeriesOptions 
-        )
+        AreaSeriesOptions
+      )
     > = ["visible", "crosshairMarkerVisible", "priceLineVisible"];
 
     visibilityOptionNames.forEach((optionName) => {
@@ -1681,11 +1739,11 @@ private addTextInput(
 
     this.showMenu(event);
   }
-  
+
 
   private populateGridMenu(event: MouseEvent): void {
     this.div.innerHTML = ""; // Clear the menu
-  
+
     // Configuration for grid options
     const gridOptions = [
       {
@@ -1727,11 +1785,11 @@ private addTextInput(
         defaultValue: true,
       },
     ];
-  
+
     // Iterate over the grid options and dynamically add inputs
     gridOptions.forEach((option) => {
       const currentValue = this.getCurrentOptionValue(option.valuePath) ?? option.defaultValue;
-  
+
       if (option.type === "color") {
         this.addColorPickerMenuItem(
           camelToTitle(option.name),
@@ -1763,7 +1821,7 @@ private addTextInput(
         );
       }
     });
-  
+
     // Back to Main Menu
     this.addMenuItem(
       "⤝ Main Menu",
@@ -1772,10 +1830,10 @@ private addTextInput(
       },
       false
     );
-  
+
     this.showMenu(event); // Display the updated menu
   }
-  
+
 
   private populateBackgroundMenu(event: MouseEvent): void {
     this.div.innerHTML = "";
@@ -1902,7 +1960,7 @@ private addTextInput(
 
   private populateTimeScaleMenu(event: MouseEvent): void {
     this.div.innerHTML = ""; // Clear current menu
-  
+
     // TimeScaleOptions configuration
     const timeScaleOptions = [
       {
@@ -1925,6 +1983,7 @@ private addTextInput(
         valuePath: "timeScale.minBarSpacing",
         min: 0.1,
         max: 10,
+        step: 0.1
       },
       {
         name: "Fix Left Edge",
@@ -1957,7 +2016,7 @@ private addTextInput(
         valuePath: "timeScale.borderColor",
       },
     ];
-  
+
     // Iterate over options and dynamically add inputs based on type
     timeScaleOptions.forEach((option) => {
       if (option.type === "number") {
@@ -1999,7 +2058,7 @@ private addTextInput(
         );
       }
     });
-  
+
     // Back to Main Menu
     this.addMenuItem(
       "⤝ Main Menu",
@@ -2008,17 +2067,17 @@ private addTextInput(
       },
       false
     );
-  
+
     this.showMenu(event); // Display the updated menu
   }
-  
+
   private populatePriceScaleMenu(
     event: MouseEvent,
     priceScaleId: "left" | "right" = "right",
     series?: ISeriesApi<any>
   ): void {
     this.div.innerHTML = ""; // Clear current menu
-  
+
     if (series) {
       // Option to switch the price scale for the series
       this.addMenuItem(
@@ -2033,20 +2092,20 @@ private addTextInput(
         false
       );
     }
-  
+
     // Dropdown for Price Scale Mode
     const currentMode: PriceScaleMode =
       this.handler.chart.priceScale(priceScaleId).options().mode ?? PriceScaleMode.Normal;
-  
+
     const modeOptions: { label: string; value: PriceScaleMode }[] = [
       { label: "Normal", value: PriceScaleMode.Normal },
       { label: "Logarithmic", value: PriceScaleMode.Logarithmic },
       { label: "Percentage", value: PriceScaleMode.Percentage },
       { label: "Indexed To 100", value: PriceScaleMode.IndexedTo100 },
     ];
-  
+
     const modeLabels = modeOptions.map((opt) => opt.label);
-  
+
     this.addSelectInput(
       "Price Scale Mode",
       modeOptions.find((opt) => opt.value === currentMode)?.label || "Normal", // Current value label
@@ -2060,7 +2119,7 @@ private addTextInput(
         }
       }
     );
-  
+
     // Additional Price Scale Options
     const options = this.handler.chart.priceScale(priceScaleId).options();
     const additionalOptions = [
@@ -2105,7 +2164,7 @@ private addTextInput(
         },
       },
     ];
-  
+
     additionalOptions.forEach((opt) => {
       this.addMenuItem(
         `${opt.name}: ${opt.value ? "On" : "Off"}`,
@@ -2118,7 +2177,7 @@ private addTextInput(
         false
       );
     });
-  
+
     // Back to Main Menu
     this.addMenuItem(
       "⤝ Main Menu",
@@ -2127,28 +2186,28 @@ private addTextInput(
       },
       false
     );
-  
+
     this.showMenu(event); // Display the updated menu
   }
-  
+
 
   private applyPriceScaleOptions(
     priceScaleId: "left" | "right",
     options: Partial<PriceScaleOptions>
-): void {
+  ): void {
     // Access the price scale from the chart using its ID
     const priceScale = this.handler.chart.priceScale(priceScaleId);
 
     if (!priceScale) {
-        console.warn(`Price scale with ID "${priceScaleId}" not found.`);
-        return;
+      console.warn(`Price scale with ID "${priceScaleId}" not found.`);
+      return;
     }
 
     // Apply the provided options to the price scale
     priceScale.applyOptions(options);
 
     console.log(`Applied options to price scale "${priceScaleId}":`, options);
-}
+  }
 
   private getCurrentOptionValue(optionPath: string): any {
     const keys = optionPath.split(".");
@@ -2166,68 +2225,6 @@ private addTextInput(
     return options;
   }
 
-  //// Class properties assumed to exist
-  //private handleCrosshairMove(param: MouseEventParams): void {
-  //  if (!this.globalTooltipEnabled) {
-  //    return;
-  //  }
-//
-  //  const closestSeries = this.getProximitySeries(param);
-//
-  //  // Only switch if the closest series has changed
-  //  if (closestSeries && closestSeries !== this.currentTooltipSeries) {
-  //    let _series = ensureExtendedSeries(closestSeries, this.handler.legend)
-//
-  //    this.switchTooltipToSeries(_series);
-  //  }
-  //}
-//
-  //
-//
-  //private switchTooltipToSeries(series: ISeriesApiExtended | null): void {
-  //  if (series === this.currentTooltipSeries) {
-  //    return; // Already attached to the same series
-  //  }
-//
-  // 
-  //  if (series) {
-  //    this.attachTooltipToSeries(series);
-  //  } else {
-  //    this.currentTooltipSeries = null;
-  //  }
-  //}
- 
-
-  private mapStyleChoice(choice: string): number {
-    switch (choice) {
-      case "Solid":
-        return 0;
-      case "Dotted":
-        return 1;
-      case "Dashed":
-        return 2;
-      case "Large Dashed":
-        return 3;
-      case "Sparse Dotted":
-        return 4;
-      default:
-        return 0;
-    }
-  }
-//
-//  private attachTooltipToSeries(series: ISeriesApiExtended): void {
-//    if (!this.Tooltip) {
-//      this.Tooltip = new TooltipPrimitive({ lineColor: "rgba(255, 0, 0, 1)" });
-//    }
-//
-//    this.Tooltip.switch(series); // Call the `switch(series)` method
-//    this.currentTooltipSeries = series;
-//
-//    console.log(
-//      `Tooltip switched to series: ${series.options().title || "Untitled"}`
-//    );
-//  }
-//
 
   private setBackgroundType(event: MouseEvent, type: ColorType): void {
     const currentBackground = this.handler.chart.options().layout?.background;
@@ -2240,15 +2237,15 @@ private addTextInput(
     } else if (type === ColorType.VerticalGradient) {
       updatedBackground = isVerticalGradientColor(currentBackground)
         ? {
-            type: ColorType.VerticalGradient,
-            topColor: currentBackground.topColor,
-            bottomColor: currentBackground.bottomColor,
-          }
+          type: ColorType.VerticalGradient,
+          topColor: currentBackground.topColor,
+          bottomColor: currentBackground.bottomColor,
+        }
         : {
-            type: ColorType.VerticalGradient,
-            topColor: "rgba(255,0,0,.33)",
-            bottomColor: "rgba(0,255,0,.33)",
-          };
+          type: ColorType.VerticalGradient,
+          topColor: "rgba(255,0,0,.2)",
+          bottomColor: "rgba(0,255,0,.2)",
+        };
     } else {
       console.error(`Unsupported ColorType: ${type}`);
       return;
@@ -2278,116 +2275,156 @@ private addTextInput(
     // Ensure the series is decorated
 
     // Populate the Series List Menu
-    this.populateSeriesListMenu(event, (destinationSeries: ISeriesApi<any>) => {
-        if (destinationSeries && destinationSeries !== originSeries) {
-            console.log("Destination series selected:", destinationSeries.options().title);
+    this.populateSeriesListMenu(event, false, (destinationSeries: ISeriesApi<any>) => {
+      if (destinationSeries && destinationSeries !== originSeries) {
+        console.log("Destination series selected:", destinationSeries.options().title);
 
-            // Ensure the destination series is also decorated
+        // Ensure the destination series is also decorated
 
-            // Instantiate and attach the FillArea
-            originSeries.primitives["FillArea"] = new FillArea(originSeries, destinationSeries, {
-                ...defaultFillAreaOptions,
-            });
-            originSeries.attachPrimitive(originSeries.primitives['FillArea'],`Fill Area ⥵ ${destinationSeries.options().title}`,false,true)
-            // Attach the FillArea as a primitive
-            //if (!originSeries.primitives['FillArea']) {
-            //  originSeries.attachPrimitive(originSeries.primitives["FillArea"])
-            //}
-            console.log("Fill Area successfully added between selected series.");
-            alert(`Fill Area added between ${originSeries.options().title} and ${destinationSeries.options().title}`);
-        } else {
-            alert("Invalid selection. Please choose a different series as the destination.");
-        }
+        // Instantiate and attach the FillArea
+        originSeries.primitives["FillArea"] = new FillArea(originSeries, destinationSeries, {
+          ...defaultFillAreaOptions,
+        });
+        originSeries.attachPrimitive(originSeries.primitives['FillArea'], `Fill Area ⥵ ${destinationSeries.options().title}`, false, true)
+        // Attach the FillArea as a primitive
+        //if (!originSeries.primitives['FillArea']) {
+        //  originSeries.attachPrimitive(originSeries.primitives["FillArea"])
+        //}
+        console.log("Fill Area successfully added between selected series.");
+        alert(`Fill Area added between ${originSeries.options().title} and ${destinationSeries.options().title}`);
+      } else {
+        alert("Invalid selection. Please choose a different series as the destination.");
+      }
     });
-}
+  }
 
 
-private getPredefinedOptions(label: string): string[] | null {
-  const predefined: Record<string, string[]> = {
-    "Series Type": ["Line", "Histogram", "Area", "Bar", "Candlestick"],
-    "Line Style": [
-      "Solid",
-      "Dotted",
-      "Dashed",
-      "Large Dashed",
-      "Sparse Dotted",
-    ],
-    "Line Type": ["Simple", "WithSteps", "Curved"],
-    "seriesType": ["Line", "Histogram", "Area", "Bar", "Candlestick"],
-    "lineStyle": [
-      "Solid",
-      "Dotted",
-      "Dashed",
-      "Large Dashed",
-      "Sparse Dotted",
-    ],
-    "lineType": ["Simple", "WithSteps", "Curved"],
-  };
+  private getPredefinedOptions(label: string): string[] | null {
+    const predefined: Record<string, string[]> = {
+      "Series Type": ["Line", "Histogram", "Area", "Bar", "Candlestick"],
+      "Line Style": [
+        "Solid",
+        "Dotted",
+        "Dashed",
+        "Large Dashed",
+        "Sparse Dotted",
+      ],
+      "Line Type": ["Simple", "WithSteps", "Curved"],
+      "seriesType": ["Line", "Histogram", "Area", "Bar", "Candlestick"],
+      "lineStyle": [
+        "Solid",
+        "Dotted",
+        "Dashed",
+        "Large Dashed",
+        "Sparse Dotted",
+      ],
+      "Price Line Style": [
+        "Solid",
+        "Dotted",
+        "Dashed",
+        "Large Dashed",
+        "Sparse Dotted",
+      ],
+      "lineType": ["Simple", "WithSteps", "Curved"],
+      "Shape": ['Rectangle', 'Rounded', 'Ellipse', 'Arrow', '3d', 'Polygon'],
+      "Candle Shape": ['Rectangle', 'Rounded', 'Ellipse', 'Arrow', '3d', 'Polygon']
 
-  return predefined[camelToTitle(label)] || null;
-}
-/**
- * Populates the Series List Menu for selecting the destination series.
- * @param onSelect Callback when a series is selected.
- */
-private populateSeriesListMenu(event: MouseEvent, onSelect: (series: ISeriesApi<any>) => void): void {
+    };
+
+    return predefined[camelToTitle(label)] || null;
+  }
+  /**
+   * Populates the Series List Menu for selecting the destination series.
+   * @param onSelect Callback when a series is selected.
+   */
+  private populateSeriesListMenu(
+    event: MouseEvent,
+    hideMenu: boolean,
+    onSelect: (series: ISeriesApi<any>) => void
+  ): void {
     this.div.innerHTML = ""; // Clear the current menu
 
-    // Fetch all available series
-    const seriesOptions = Array.from(this.handler.seriesMap.entries()).map(([seriesName, series]) => ({
+    // 1) Gather all series from your `handler.seriesMap`.
+    const mappedSeries = Array.from(this.handler.seriesMap.entries()).map(
+      ([seriesName, series]) => ({
         label: seriesName,
         value: series,
-    }));
+      })
+    );
 
-    // Display series in the menu
+    // 2) Optionally prepend `this.handler.series` if it exists
+    let seriesOptions = mappedSeries;
+    if (this.handler.series) {
+      // Only prepend if `this.handler.series` is truthy
+      const mainSeriesItem = {
+        label: "Main Series",
+        value: this.handler.series,
+      };
+      seriesOptions = [mainSeriesItem, ...mappedSeries];
+    }
+
+    // 3) Display series in the menu
     seriesOptions.forEach((option) => {
-        this.addMenuItem(option.label, () => {
-            // Call the onSelect callback with the selected series
-            onSelect(option.value);
-            this.hideMenu(); // Close the menu after selection
-        });
+      this.addMenuItem(
+        option.label,
+        () => {
+          onSelect(option.value);
+          if (hideMenu) {
+            this.hideMenu();
+          } else {
+            this.div.innerHTML = ""; // Clear the current menu
+            this.populateSeriesMenu(option.value, event); // Open the series menu
+            this.showMenu(event);
+          }
+        },
+        false,
+        true
+      );
     });
 
     // Add a "Cancel" option to go back or exit
     this.addMenuItem("Cancel", () => {
-        console.log("Operation canceled.");
-        this.hideMenu();
+      console.log("Operation canceled.");
+      this.hideMenu();
     });
 
-    this.showMenu(event); // Show the menu at the current mouse position
-}
-
-private customizeFillAreaOptions(event: MouseEvent, FillArea: FillArea): void {
-  this.div.innerHTML = ""; // Clear current menu
-
-  // Add color pickers for each color-related option
-  this.addColorPickerMenuItem(
-      "Origin Top Color",
-      FillArea.options.originColor,
-      "originColor",
-      FillArea
-  );
+    // Show the menu at the current mouse position
+    this.showMenu(event);
+  }
 
 
-  this.addColorPickerMenuItem(
-      "Destination Top Color",
-      FillArea.options.destinationColor,
-      "destinationColor",
-      FillArea
-  );
+  private customizeFillAreaOptions(event: MouseEvent, FillArea: ISeriesPrimitive): void {
+    this.div.innerHTML = ""; // Clear current menu
+    if (isFillArea(FillArea)) {
+      // Add color pickers for each color-related option
+      this.addColorPickerMenuItem(
+        "Origin Top Color",
+        FillArea.options.originColor,
+        "originColor",
+        FillArea
+      );
 
 
-  // Back to main menu
-  this.addMenuItem("⤝ Back to Main Menu", () => this.populateChartMenu(event), false);
+      this.addColorPickerMenuItem(
+        "Destination Top Color",
+        FillArea.options.destinationColor,
+        "destinationColor",
+        FillArea
+      );
 
-  this.showMenu(event);
-}
+
+      // Back to main menu
+      this.addMenuItem("⤝ Back to Main Menu", () => this.populateChartMenu(event), false);
+
+      this.showMenu(event);
+    }
+  }
 
 
   public addResetViewOption(): void {
     const resetMenuItem = this.addMenuInput(this.div, {
       type: "hybrid",
-      label: "Reset View",
+      label: "∟ Reset",
       hybridConfig: {
         defaultAction: () => {
           this.handler.chart.timeScale().resetTimeScale();
@@ -2395,11 +2432,11 @@ private customizeFillAreaOptions(event: MouseEvent, FillArea: FillArea): void {
         },
         options: [
           {
-            name: "Reset Time Scale Only",
+            name: "⥗ Time Scale",
             action: () => this.handler.chart.timeScale().resetTimeScale(),
           },
           {
-            name: "Fit Content Only",
+            name: "⥘ Price Scale",
             action: () => this.handler.chart.timeScale().fitContent(),
           },
         ],
