@@ -364,8 +364,8 @@ private mapToSeries(item: LegendItem): LegendSeries {
         const div = document.createElement('div');
         div.classList.add('series-info'); // Add CSS class for styling
         div.style.flex = '1'; // Allow the text to take up available space
-        const displayOCvalues = ['Bar', 'Candlestick'].includes(line.seriesType || '');
-    
+        const displayOCvalues = ['Bar', 'Candlestick', 'Ohlc'].includes(line.seriesType || '');
+
         if (displayOCvalues) {
             const openPrice = '-';
             const closePrice = '-';
@@ -756,7 +756,7 @@ private mapToSeries(item: LegendItem): LegendSeries {
         const options: any = this.handler.series.options()
 
         if (!param.time) {
-            this.candle.style.color = 'transparent'
+            this.candle.style.color = '#ffffff'
             this.candle.innerHTML = this.candle.innerHTML.replace(options['upColor'], '').replace(options['downColor'], '')
             return
         }
@@ -828,7 +828,7 @@ private mapToSeries(item: LegendItem): LegendSeries {
                 e.div!.innerHTML = `
                     <span style="color: ${e.colors[0]};">${e.legendSymbol[0] || '▨'}</span> 
                     ${e.name}: ${value}`;
-            } else if (seriesType === 'Bar' || seriesType === 'customCandle' || seriesType === 'htfCandle') {
+            } else if (seriesType === 'Bar' || seriesType === 'Candlestick' || seriesType === 'Ohlc') {
                 const { open, close } = data as BarData;
                 if (open == null || close == null) {
                     e.div!.innerHTML = `${e.name}: -`;
@@ -878,7 +878,7 @@ private mapToSeries(item: LegendItem): LegendSeries {
                 const priceFormat = seriesItem.series.options().priceFormat as PriceFormatBuiltIn;
             
                 // Check if the series type supports OHLC values
-                const isOHLC = ['Bar', 'customCandle', 'htfCandle'].includes(seriesType);
+                const isOHLC = ['Bar', 'Candlestick', 'Ohlc'].includes(seriesType);
                 if (isOHLC) {
                     const { open, close, high, low } = data as BarData;
                     if (open == null || close == null || high == null || low == null) {
