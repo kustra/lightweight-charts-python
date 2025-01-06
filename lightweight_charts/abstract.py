@@ -1358,7 +1358,10 @@ class AbstractChart(Candlestick, Pane):
             to: {pd.to_datetime(end_time).timestamp()}
         }})
         ''')
-
+    
+    def get_visible_range(self):
+        return self.win.run_script_and_get(f'{self.id}.chart.timeScale().getVisibleRange()')
+        
     def resize(self, width: Optional[float] = None, height: Optional[float] = None):
         """
         Resizes the chart within the window.
