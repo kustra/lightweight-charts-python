@@ -3,7 +3,7 @@ import json
 import os
 from base64 import b64decode
 from datetime import datetime
-from typing import Callable, Union, Literal, List, Optional, Any
+from typing import Callable, Union, Literal, List, Optional, Any, Dict
 import pandas as pd
 from webview.errors import JavascriptException
 
@@ -1359,8 +1359,12 @@ class AbstractChart(Candlestick, Pane):
         }})
         ''')
     
-    def get_visible_range(self):
-        return self.win.run_script_and_get(f'{self.id}.chart.timeScale().getVisibleRange()')
+    def get_visible_range(self) -> Dict[str, datetime]:
+        _visible_range = self.win.run_script_and_get(f'{self.id}.chart.timeScale().getVisibleRange()')
+        return {
+            "from": datetime.fromtimestamp(_visible_range["from"]),
+            "to":   datetime.fromtimestamp(_visible_range["to"]),
+        }
         
     def resize(self, width: Optional[float] = None, height: Optional[float] = None):
         """
