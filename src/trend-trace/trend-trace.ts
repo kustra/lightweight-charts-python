@@ -1204,40 +1204,44 @@ private _drawSingleValueData(
 	data: (DataPoint & { scaledX1: number; scaledX2: number })[]
   ): void {
 	const { context: ctx, horizontalPixelRatio, verticalPixelRatio } = scope;
-	let previousBar: DataPoint & { scaledX1: number; scaledX2: number } | null = null;
+	let previousBar: (DataPoint & { scaledX1: number; scaledX2: number }) | null = null;
+  
+	// Set the line appearance once, before drawing
+	ctx.lineWidth = this._options.lineWidth ?? 1;
+	setLineStyle(ctx, (this._options.lineStyle ?? 1) as LineStyle);
+	ctx.strokeStyle = this._options.visible
+	  ? (this._options.lineColor ?? '#ffffff')
+	  : 'rgba(0,0,0,0)';
   
 	data.forEach(point => {
 	  // Skip point if there's no valid logical x value.
 	  if (point.x1 === null || point.x1 === undefined) return;
-	  ctx.fillStyle = this._options.visible?this._options.lineColor ?? '#ffffff':'rgba(0,0,0,0)'
-	  ctx.lineWidth = this._options.lineWidth??1;
-	  setLineStyle(ctx, this._options.lineStyle as LineStyle);
-	  // Calculate the scaled X using scaledX1 exclusively.
+  
+	  // Calculate the current point's coordinates using scaledX1.
 	  const scaledX1: number = point.scaledX1 * horizontalPixelRatio;
-	  const scaledValue: number = (this._source._source?.priceToCoordinate(point.value ?? 0) ?? 0) * verticalPixelRatio;
+	  const scaledValue: number =
+		(this._source._source?.priceToCoordinate(point.value ?? 0) ?? 0) * verticalPixelRatio;
   
-	 // // Draw the data point as a circle at (scaledX1, scaledValue)
-	 // ctx.beginPath();
-	 // ctx.arc(scaledX1, scaledValue, 3, 0, 2 * Math.PI);
-	 // ctx.fillStyle = this._options.visible?this._options.lineColor ??  'rgba(255,255,255,1)':'rgba(0,0,0,0)'
-	 // ctx.fill();
-	 // ctx.stroke();
-  //
-	  // If a previous data point exists, draw a connecting line from its scaledX1 to current point's scaledX1.
+	  ctx.beginPath();
 	  if (previousBar) {
+		// Move to the previous point's location.
 		const prevScaledX1: number = previousBar.scaledX1 * horizontalPixelRatio;
-		const prevScaledValue: number = (this._source._source?.priceToCoordinate(previousBar.value ?? 0) ?? 0) * verticalPixelRatio;
-  
-		ctx.beginPath();
+		const prevScaledValue: number =
+		  (this._source._source?.priceToCoordinate(previousBar.value ?? 0) ?? 0) * verticalPixelRatio;
 		ctx.moveTo(prevScaledX1, prevScaledValue);
-		ctx.lineTo(scaledX1, scaledValue);
-		ctx.stroke();
+	  } else {
+		// If there is no previous point, use the current point as the starting point.
+		ctx.moveTo(scaledX1, scaledValue);
 	  }
+	  // Draw a line to the current point.
+	  ctx.lineTo(scaledX1, scaledValue);
+	  ctx.stroke();
   
-	  // Update previousBar to the current data point.
+	  // Update previousBar to be the current point.
 	  previousBar = point;
 	});
   }
+  
   
 
 	private _drawWicks(scope: BitmapCoordinatesRenderingScope, bars: (DataPoint & { scaledX1: number; scaledX2: number, wickColor: string | undefined;
