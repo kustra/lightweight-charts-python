@@ -5,20 +5,15 @@ import {
   CandlestickSeriesOptions,
   ColorType,
   IChartApi,
-  ISeriesApi,
   ISeriesPrimitive,
   LineStyle,
   MouseEventParams,
   PriceScaleMode,
   PriceScaleOptions,
-
-  SeriesType,
   SolidColor,
   VerticalGradientColor,
   Background,
-
 } from 'lightweight-charts';
-
 // ----------------------------------
 // Internal Helpers and Types
 // ----------------------------------
@@ -66,7 +61,9 @@ import { StylePicker } from './style-picker';
 // ----------------------------------
 import { CandleShape } from '../ohlc-series/data';
 import { buildOptions, camelToTitle } from '../helpers/formatting';
-
+import { DataPoint, TrendTrace, defaultSequenceOptions } from '../trend-trace/trend-trace';
+import { Point as LogicalPoint } from '../drawing/data-source';
+import { TwoPointDrawing } from '../drawing/two-point-drawing';
 // ----------------------------------
 // If you have actual code referencing commented-out or removed imports,
 // reintroduce them accordingly.
@@ -81,7 +78,17 @@ interface Item {
 }
 
 declare const window: GlobalParams;
-
+// Define a common interface for an option descriptor.
+interface OptionDescriptor {
+  name: string;
+  type: "number" | "boolean" | "color" | "select";
+  valuePath: string;
+  defaultValue?: any;
+  min?: number;
+  max?: number;
+  step?: number;
+  options?: string[];
+}
 export class ContextMenu {
   private div: HTMLDivElement;
   private hoverItem: Item | null;
@@ -92,11 +99,34 @@ export class ContextMenu {
   );
   private saveDrawings: Function | null = null;
   private drawingTool: DrawingTool | null = null;
+  public recentSeries: ISeriesApiExtended | null = null;
+  public recentDrawing: Drawing | null = null;
+
   ///private globalTooltipEnabled: boolean = false;
   ///private Tooltip: TooltipPrimitive | null = null;
   ///private currentTooltipSeries: ISeriesApiExtended | null = null;
 
+  constructor(
+    private handler: Handler,
+    private handlerMap: Map<string, Handler>,
+    public getMouseEventParams: () => MouseEventParams | null
+  ) {
+    this.div = document.createElement("div");
+    this.div.classList.add("context-menu");
+    document.body.appendChild(this.div);
+    this.div.style.overflowY = "scroll";
+    this.hoverItem = null;
+    document.body.addEventListener(
+      "contextmenu",
+      this._onRightClick.bind(this)
+    );
+    document.body.addEventListener("click", this._onClick.bind(this));
+    //this.handler.chart.subscribeCrosshairMove((param: MouseEventParams) => {
+    //  this.handleCrosshairMove(param);
+    //});
 
+    this.setupMenu();
+  } 
   private constraints: Record<
     string,
     { skip?: boolean; min?: number; max?: number }
@@ -107,7 +137,10 @@ export class ContextMenu {
       tickInterval: { min: 0, max: 100 },
       lastPriceAnimation: { skip: true },
       lineType: { min: 0, max: 2 },
+      lineStyle: { min: 0, max: 4 },
+
       seriesType: { skip: true },
+      chandelierSize: {min: 1}
 
     };
   public setupDrawingTools(saveDrawings: Function, drawingTool: DrawingTool) {
@@ -178,27 +211,7 @@ export class ContextMenu {
     this.items.push(item);
   }
 
-  constructor(
-    private handler: Handler,
-    private handlerMap: Map<string, Handler>,
-    private getMouseEventParams: () => MouseEventParams | null
-  ) {
-    this.div = document.createElement("div");
-    this.div.classList.add("context-menu");
-    document.body.appendChild(this.div);
-    this.div.style.overflowY = "scroll";
-    this.hoverItem = null;
-    document.body.addEventListener(
-      "contextmenu",
-      this._onRightClick.bind(this)
-    );
-    document.body.addEventListener("click", this._onClick.bind(this));
-    //this.handler.chart.subscribeCrosshairMove((param: MouseEventParams) => {
-    //  this.handleCrosshairMove(param);
-    //});
 
-    this.setupMenu();
-  }
 
   private _onClick(ev: MouseEvent) {
     const target = ev.target as Node;
@@ -221,7 +234,7 @@ export class ContextMenu {
       this.getMouseEventParams()!
     );
     const drawingFromProximity = this.getProximityDrawing(); // Implement this method based on your drawing logic
-
+    const trendFromProximity = this.getProximityTrendTrace()
     console.log("Mouse Event Params:", mouseEventParams);
     console.log("Proximity Series:", seriesFromProximity);
     console.log("Proximity Drawing:", drawingFromProximity);
@@ -233,14 +246,23 @@ export class ContextMenu {
       // Right-click on a series
       console.log("Right-click detected on a series (proximity).");
       this.populateSeriesMenu(seriesFromProximity, event);
+      this.recentSeries = seriesFromProximity
     } else if (drawingFromProximity) {
       // Right-click on a drawing
       console.log("Right-click detected on a drawing.");
       this.populateDrawingMenu(drawingFromProximity, event);
-    } else if (mouseEventParams?.hoveredSeries) {
+      this.recentDrawing = drawingFromProximity
+    }else if (trendFromProximity) {
+      // Right-click on a drawing
+      console.log("Right-click detected on a drawing.");
+      this.populateTrendTraceMenu(event,trendFromProximity,);
+    }
+    
+    else if (mouseEventParams?.hoveredSeries) {
       // Fallback to hovered series
       console.log("Right-click detected on a series (hovered).");
-      this.populateSeriesMenu(mouseEventParams.hoveredSeries, event);
+      this.populateSeriesMenu(mouseEventParams.hoveredSeries as ISeriesApiExtended, event);
+      this.recentSeries = seriesFromProximity
     } else {
       // Right-click on chart background
       console.log("Right-click detected on the chart background.");
@@ -262,11 +284,23 @@ export class ContextMenu {
     if (Drawing.hoveredObject) {
       return Drawing.hoveredObject;
     }
+
     return null;
   }
+
+
+  private getProximityTrendTrace(): TrendTrace | null {
+ 
+    if (TrendTrace.hoveredObject) {
+      return TrendTrace.hoveredObject;
+
+    }
+    return null;
+  }
+
   private getProximitySeries(
     param: MouseEventParams
-  ): ISeriesApi<SeriesType> | null {
+  ): ISeriesApiExtended | null {
     if (!param || !param.seriesData) {
       console.warn("No mouse event parameters or series data available.");
       return null;
@@ -278,7 +312,7 @@ export class ContextMenu {
     }
 
     const cursorY = param.point.y;
-    let sourceSeries: ISeriesApi<SeriesType> | null = null;
+    let sourceSeries: ISeriesApiExtended | null = null;
     const referenceSeries = this.handler._seriesList[0] as ISeriesApiExtended;
 
     if (this.handler.series) {
@@ -302,7 +336,7 @@ export class ContextMenu {
 
     const seriesByDistance: {
       distance: number;
-      series: ISeriesApi<SeriesType>;
+      series: ISeriesApiExtended;
     }[] = [];
 
     param.seriesData.forEach((data, series) => {
@@ -319,7 +353,8 @@ export class ContextMenu {
         const percentageDifference = (distance / cursorPrice) * 100;
 
         if (percentageDifference <= 3.33) {
-          seriesByDistance.push({ distance, series });
+          const extendedSeries = ensureExtendedSeries(series,this.handler.legend)
+          seriesByDistance.push({ distance, series: extendedSeries});
         }
       }
     });
@@ -346,7 +381,7 @@ export class ContextMenu {
     this.div.style.top = `${y}px`;
     this.div.style.width = "250px";
     this.div.style.maxHeight = `400px`;
-    this.div.style.overflowY = "hidden";
+    this.div.style.overflowY = "auto";
     this.div.style.display = "block";
     this.div.style.overflowX = "hidden"
     console.log("Displaying Menu at:", x, y);
@@ -846,7 +881,7 @@ export class ContextMenu {
 
 
   private populateSeriesMenu(
-    series: ISeriesApi<SeriesType> | ISeriesApiExtended,
+    series: ISeriesApiExtended,
     event: MouseEvent
   ): void {
     // Type guard to check if series is extended
@@ -1188,36 +1223,15 @@ export class ContextMenu {
     });
 
 
-    // Add "Fill Area Between" menu option
+    // Add the "Primitives" submenu
     this.addMenuItem(
-      "Fill Area Between",
+      "Primitives ▸",
       () => {
-        this.startFillAreaBetween(event, _series); // Define the method below
+          this.populatePrimitivesMenu(_series, event);
       },
       false,
-      false
-    );
-
-
-    // Access the primitives
-    const primitives = _series.primitives;
-
-    // Debugging output
-    console.log("Primitives:", primitives);
-
-    // Add "Customize Fill Area" option if `FillArea` is present
-    const hasFillArea = primitives?.FillArea ?? primitives?.pt;
-
-    if (primitives["FillArea"]) {
-      this.addMenuItem(
-        "Customize Fill Area",
-        () => {
-          this.customizeFillAreaOptions(event, hasFillArea);
-        },
-        false,
-        true
-      );
-    }
+      true
+  );
 
     // Add remaining existing menu items
     this.addMenuItem(
@@ -1231,10 +1245,10 @@ export class ContextMenu {
 
     this.showMenu(event);
   }
-
+  
   private populateDrawingMenu(drawing: Drawing, event: MouseEvent): void {
     this.div.innerHTML = ""; // Clear existing menu items
-
+    if (!this.drawingTool) { this.drawingTool = new DrawingTool(this.handler.chart, this.handler._seriesList[0]); }
     // Add drawing-specific menu items
     for (const optionName of Object.keys(drawing._options)) {
       let subMenu;
@@ -1256,6 +1270,36 @@ export class ContextMenu {
       });
     }
 
+    
+  // --- Conditionally add the "Trend Trace" menu items ---  
+  if (drawing.points[0] && drawing.points[1]) {
+    // Loop over the linked objects from drawing (casting to TwoPointDrawing)
+    (drawing as TwoPointDrawing).linkedObjects.forEach(object => {
+      // Check if the object is a TrendTrace instance.
+      if (object instanceof TrendTrace) {
+        // Add a menu item with the label that includes trendtrace._source.title.
+        this.addMenuItem(
+          `${object.title} Options`,
+          () => {
+            this.populateTrendTraceMenu(event, object as TrendTrace);
+          },
+          false,
+          true
+        );
+      }
+    });
+
+
+
+      this.addMenuItem(
+        "Trend Trace ▸",
+        () => {
+          this._createTrendTrace(event, drawing as TwoPointDrawing);
+        },
+        false,
+        true
+      );
+    }
     const onClickDelete = () => this.drawingTool!.delete(drawing);
     this.separator();
     this.menuItem("Delete Drawing", onClickDelete);
@@ -1280,7 +1324,7 @@ export class ContextMenu {
     this.addMenuItem(
       " ~ Series List",
       () => {
-        this.populateSeriesListMenu(event, false, (destinationSeries: ISeriesApi<SeriesType>) => {
+        this.populateSeriesListMenu(event, false, (destinationSeries: ISeriesApiExtended) => {
           this.populateSeriesMenu(destinationSeries, event)
         })
       }, false, true
@@ -1415,7 +1459,7 @@ export class ContextMenu {
     this.populateLayoutMenu(event);
   }
 
-  private populateWidthMenu(event: MouseEvent, series: ISeriesApi<any>): void {
+  private populateWidthMenu(event: MouseEvent, series: ISeriesApiExtended): void {
     this.div.innerHTML = ""; // Clear current menu
 
     // Use the stored currentWidthOptions array
@@ -1446,7 +1490,77 @@ export class ContextMenu {
 
     this.showMenu(event);
   }
-  private populateStyleMenu(event: MouseEvent, series: ISeriesApi<any>): void {
+
+  private populatePrimitivesMenu(series: ISeriesApiExtended, event: MouseEvent): void {
+    this.div.innerHTML = "";
+    console.log(`Showing Primitive Menu `);
+
+    const primitives = series.primitives;
+    this.addMenuItem(
+      "Fill Area Between",
+      () => {
+        this.startFillAreaBetween(event, series); // Define the method below
+      },
+      false,
+      false
+    );
+
+
+    // Access the primitives
+
+    // Debugging output
+    console.log("Primitives:", primitives);
+
+    // Add "Customize Fill Area" option if `FillArea` is present
+    const hasFillArea = primitives?.FillArea ?? primitives?.pt;
+
+    if (primitives["FillArea"]) {
+      this.addMenuItem(
+        "Customize Fill Area",
+        () => {
+          this.customizeFillAreaOptions(event, hasFillArea);
+        },
+        false,
+        true
+      );
+    }
+    
+      this.addMenuItem(
+          "Create TrendTrace",
+          () => {
+              this._createTrendTrace(event, this.recentDrawing as TwoPointDrawing );
+          },
+          false,
+          false
+      );
+  
+
+      // Debugging output
+      console.log("Primitives:", primitives);
+  
+      // Add "Customize TrendTrace" option if `TrendTrace` is already present
+  
+      if (primitives["TrendTrace"]) {
+          this.addMenuItem(
+              "Customize TrendTrace",
+              () => {
+                  this.populateTrendTraceMenu(event,primitives["TrendTrace"]);
+              },
+              false,
+              true
+          );
+      }
+    // Add a Back option
+    this.addMenuItem("⤝ Back", () => {
+      this.populateSeriesMenu(series, event);
+
+    },false,false);
+
+    this.showMenu(event);
+}
+
+
+  private populateStyleMenu(event: MouseEvent, series: ISeriesApiExtended): void {
     this.div.innerHTML = ""; // Clear the current menu
 
     this.currentStyleOptions.forEach((option) => {
@@ -1494,7 +1608,8 @@ export class ContextMenu {
     // Add a Back option
     this.addMenuItem("⤝ Back", () => {
       this.populateSeriesMenu(series, event);
-    });
+
+    },false,false);
 
     this.showMenu(event);
   }
@@ -1502,7 +1617,7 @@ export class ContextMenu {
 
 
   private populateCloneSeriesMenu(
-    series: ISeriesApi<SeriesType>,
+    series: ISeriesApiExtended,
     event: MouseEvent
   ): void {
     this.div.innerHTML = "";
@@ -1598,7 +1713,7 @@ export class ContextMenu {
 
   private populateColorOptionsMenu(
     colorOptions: { label: string; value: string }[],
-    series: ISeriesApi<any>,
+    series: ISeriesApiExtended,
     event: MouseEvent
   ): void {
     this.div.innerHTML = "";
@@ -1626,7 +1741,7 @@ export class ContextMenu {
 
   private populateVisibilityMenu(
     event: MouseEvent,
-    series: ISeriesApi<any>
+    series: ISeriesApiExtended
   ): void {
     this.div.innerHTML = "";
 
@@ -2074,7 +2189,7 @@ export class ContextMenu {
   private populatePriceScaleMenu(
     event: MouseEvent,
     priceScaleId: "left" | "right" = "right",
-    series?: ISeriesApi<any>
+    series?: ISeriesApiExtended
   ): void {
     this.div.innerHTML = ""; // Clear current menu
 
@@ -2275,7 +2390,7 @@ export class ContextMenu {
     // Ensure the series is decorated
 
     // Populate the Series List Menu
-    this.populateSeriesListMenu(event, false, (destinationSeries: ISeriesApi<any>) => {
+    this.populateSeriesListMenu(event, false, (destinationSeries: ISeriesApiExtended) => {
       if (destinationSeries && destinationSeries !== originSeries) {
         console.log("Destination series selected:", destinationSeries.options().title);
 
@@ -2337,10 +2452,10 @@ export class ContextMenu {
    * Populates the Series List Menu for selecting the destination series.
    * @param onSelect Callback when a series is selected.
    */
-  private populateSeriesListMenu(
+  public populateSeriesListMenu(
     event: MouseEvent,
     hideMenu: boolean,
-    onSelect: (series: ISeriesApi<any>) => void
+    onSelect: (series: ISeriesApiExtended) => void
   ): void {
     this.div.innerHTML = ""; // Clear the current menu
 
@@ -2387,7 +2502,15 @@ export class ContextMenu {
       console.log("Operation canceled.");
       this.hideMenu();
     });
-
+    // Back to Main Menu
+    this.addMenuItem(
+      "⤝ Main Menu",
+      () => {
+        this.populateChartMenu(event);
+      },
+      false
+    );
+    
     // Show the menu at the current mouse position
     this.showMenu(event);
   }
@@ -2398,7 +2521,7 @@ export class ContextMenu {
     if (isFillArea(FillArea)) {
       // Add color pickers for each color-related option
       this.addColorPickerMenuItem(
-        "Origin Top Color",
+        "Origin > Destination",
         FillArea.options.originColor,
         "originColor",
         FillArea
@@ -2406,18 +2529,18 @@ export class ContextMenu {
 
 
       this.addColorPickerMenuItem(
-        "Destination Top Color",
+        "Origin < Destination",
         FillArea.options.destinationColor,
         "destinationColor",
         FillArea
       );
 
-
+    } 
       // Back to main menu
       this.addMenuItem("⤝ Back to Main Menu", () => this.populateChartMenu(event), false);
 
       this.showMenu(event);
-    }
+    
   }
 
 
@@ -2444,5 +2567,337 @@ export class ContextMenu {
     })
     this.div.appendChild(resetMenuItem);
   }
+    /**
+     * Creates a TrendTrace for the given series.
+     *
+     * @param series - The series to which the TrendTrace will be attached.
+     */
+  public _createTrendTrace(event: MouseEvent, drawing: TwoPointDrawing): void {
+        
+      // Populate the Series List Menu
+      this.populateSeriesListMenu(event, false, (series: ISeriesApiExtended) => {
+        if (series && drawing.p1 && drawing.p2) {
+          console.log("Series selected:", series.options().title);
+          series.primitives['TrendTrace'] = new TrendTrace(this.handler, series, drawing.p1 as LogicalPoint, drawing.p2 as LogicalPoint, defaultSequenceOptions)
+          series.attachPrimitive(series.primitives['TrendTrace'], `${drawing.p1?.logical} ⥵ ${drawing.p2?.logical}`, false, true)
+          console.log("Trend Trace successfully created for selected series.");
+          (drawing as TwoPointDrawing).linkedObjects.push(series.primitives['TrendTrace'])
 
+          alert(`Trend Trace created for ${series.options().title} `);
+          } 
+          });
+          }
+ 
+/**
+ * Main entry point for the trend trace menu.
+ *
+ * @param event - The mouse event that triggered the menu.
+ * @param trendTrace - The trend trace instance.
+ */
+private populateTrendTraceMenu(event: MouseEvent, trendTrace: TrendTrace): void {
+  this.div.innerHTML = ""; // Clear the menu
+
+  this.addMenuItem(
+    "Color Options ▸",
+    () => this.populateTrendColorMenu(event, trendTrace),
+    false,
+    true
+  );
+
+  this.addMenuItem(
+    "General Options ▸",
+    () => this.populateTrendOptionsMenu(event, trendTrace),
+    false,
+    true
+  );
+  this.addMenuItem(
+    "⤝ Main Menu",
+    () => this.populateChartMenu(event),
+    false
+  );
+
+  this.showMenu(event);
 }
+// Define a common interface for an option descriptor.
+
+
+/**
+ * Populates the submenu for color options.
+ *
+ * For OHLC data (as determined by isOHLCData), we show OHLC-specific color options;
+ * otherwise, we display a single "Line Color" option.
+ *
+ * This function uses the build-out approach similar to the Time Scale menu.
+ *
+ * @param event - The mouse event that triggered the menu.
+ * @param trendTrace - The TrendTrace instance.
+ */
+private populateTrendColorMenu(event: MouseEvent, trendTrace: TrendTrace): void {
+  this.div.innerHTML = ""; // Clear the menu
+  const currentOptions = trendTrace.getOptions();
+  const sequence = trendTrace._sequence;
+
+  const ohlcData: DataPoint[] = sequence.data ;
+  const isOHLC = ohlcData.every(
+    point =>
+      point.open !== undefined &&
+      point.high !== undefined &&
+      point.low !== undefined &&
+      point.close !== undefined
+  );
+
+  // Build a list of color options based on the data type.
+  const colorOptions: OptionDescriptor[] = []
+  
+  if (isOHLC) { colorOptions.push(
+        {
+          name: "Up Color",
+          type: "color",
+          valuePath: "upColor",
+          defaultValue: currentOptions.upColor ?? "rgba(0,255,0,.25)",
+        },
+        {
+          name: "Down Color",
+          type: "color",
+          valuePath: "downColor",
+          defaultValue: currentOptions.downColor ?? "rgba(255,0,0,.25)",
+        },
+        {
+          name: "Border Up Color",
+          type: "color",
+          valuePath: "borderUpColor",
+          defaultValue: currentOptions.borderUpColor ?? "#1c9d1c",
+        },
+        {
+          name: "Border Down Color",
+          type: "color",
+          valuePath: "borderDownColor",
+          defaultValue: currentOptions.borderDownColor ?? "#d5160c",
+        },
+        {
+          name: "Wick Up Color",
+          type: "color",
+          valuePath: "wickUpColor",
+          defaultValue: currentOptions.wickUpColor ?? "#1c9d1c",
+        },
+        {
+          name: "Wick Down Color",
+          type: "color",
+          valuePath: "wickDownColor",
+          defaultValue: currentOptions.wickDownColor ?? "#d5160c",
+        })}  else colorOptions.push( 
+     
+        {
+          name: "Line Color",
+          type: "color",
+          valuePath: "lineColor",
+          defaultValue: currentOptions.lineColor ?? "#ffffff",
+        },
+        )
+
+  // Iterate over each color option and add it using addColorPickerMenuItem.
+  colorOptions.forEach((option) => {
+    this.addColorPickerMenuItem(
+      camelToTitle(option.name),
+      option.defaultValue,
+      option.valuePath,
+      trendTrace
+    );
+  });
+
+  // Back to Trend Trace Menu
+  this.addMenuItem(
+    "⤝ Trend Trace Menu",
+    () => this.populateTrendTraceMenu(event, trendTrace),
+    false
+  );
+  this.showMenu(event);
+}
+
+
+
+/**
+ * Populates the submenu for general options.
+ *
+ * Logical indices (P1/P2) are always shown.
+ * However, appearance options that are relevant only for OHLC data—
+ * such as Bar Spacing, Radius, Shape, Show Wicks, Show Borders, and Chandelier Size—
+ * are added only if isOHLCData returns true.
+ *
+ * Each update uses buildOptions.
+ *
+ * @param event - The mouse event that triggered the menu.
+ * @param trendTrace - The TrendTrace instance.
+ */
+private populateTrendOptionsMenu(event: MouseEvent, trendTrace: TrendTrace): void {
+  this.div.innerHTML = ""; // Clear the menu
+  const currentOptions = trendTrace.getOptions();
+  const sequence = trendTrace._sequence;
+
+
+  const ohlcData: DataPoint[] = sequence.data ;
+  const isOHLC = ohlcData.every(
+    point =>
+      point.open !== undefined &&
+      point.high !== undefined &&
+      point.low !== undefined &&
+      point.close !== undefined
+  );
+
+// Define the generalOptions array with a consistent option type.
+const generalOptions: Array<{
+  name: string;
+  type: "number" | "boolean" | "select";
+  valuePath: string;
+  defaultValue: any;
+  min?: number;
+  max?: number;
+  step?: number;
+  options?: Array<{ label: string; value: any }> | string[];
+}> = [];
+
+// If the series is OHLC, add appearance options specific to OHLC.
+if (isOHLC) {
+  generalOptions.push(
+    {
+      name: "Bar Spacing",
+      type: "number",
+      valuePath: "barSpacing",
+      defaultValue: currentOptions.barSpacing ?? 0.8,
+      min: 0.1,
+      max: 2,
+      step: 0.1,
+    },
+    {
+      name: "Radius",
+      type: "number",
+      valuePath: "radius",
+      defaultValue: currentOptions.radius ?? 0.6,
+      min: 0,
+      max: 1,
+      step: 0.1,
+    },
+    {
+      name: "Shape",
+      type: "select",
+      valuePath: "shape",
+      defaultValue: currentOptions.shape ?? "Rounded",
+      options: ["Rectangle", "Rounded", "Ellipse", "Arrow", "3d", "Polygon"],
+    },
+    {
+      name: "Show Wicks",
+      type: "boolean",
+      valuePath: "wickVisible",
+      defaultValue: currentOptions.wickVisible ?? true,
+    },
+    {
+      name: "Show Borders",
+      type: "boolean",
+      valuePath: "borderVisible",
+      defaultValue: currentOptions.borderVisible ?? true,
+    },
+    {
+      name: "Chandelier Size",
+      type: "number",
+      valuePath: "chandelierSize",
+      defaultValue: currentOptions.chandelierSize ?? 1,
+      min: 1,
+      max: 100,
+      step: 1,
+    }
+  );
+}
+
+// Always include the following default appearance options.
+
+// Line Style option with numeric mapping.
+generalOptions.push({
+  name: "Line Style",
+  type: "select",
+  valuePath: "lineStyle",
+  defaultValue: currentOptions.lineStyle ?? 0,
+  options: [
+    { label: "Solid",         value: 0 },
+    { label: "Dotted",        value: 1 },
+    { label: "Dashed",        value: 2 },
+    { label: "Large Dashed",  value: 3 },
+    { label: "Sparse Dotted", value: 4 },
+  ],
+});
+
+// Line Width option for adjusting the appearance of the line.
+generalOptions.push({
+  name: "Line Width",
+  type: "number",
+  valuePath: "lineWidth",
+  defaultValue: currentOptions.lineWidth ?? 1,
+  min: 0.5,
+  max: 10,
+  step: 0.5,
+});
+
+  // Visible toggle option. This option is always added.
+  generalOptions.push({
+    name: "Visible",
+    type: "boolean",
+    valuePath: "visible",
+    defaultValue: currentOptions.visible ?? true,
+  });
+// Iterate over each general option and add an input based on its type.
+generalOptions.forEach((option) => {
+  if (option.type === "number") {
+    this.addNumberInput(
+      camelToTitle(option.name),
+      option.defaultValue,
+      (newValue: number) => {
+        const updatedOptions = buildOptions(option.valuePath, newValue);
+        trendTrace.applyOptions(updatedOptions);
+        console.log(`Updated ${option.name} to: ${newValue}`);
+      },
+      option.min,
+      option.max,
+      option.step
+    );
+  } else if (option.type === "boolean") {
+    this.addCheckbox(
+      camelToTitle(option.name),
+      option.defaultValue,
+      (newValue: boolean) => {
+        const updatedOptions = buildOptions(option.valuePath, newValue);
+        trendTrace.applyOptions(updatedOptions);
+        console.log(`Updated ${option.name} to: ${newValue}`);
+      }
+    );
+  } else if (option.type === "select") {
+    // If options are objects, extract their labels.
+    const optionLabels = Array.isArray(option.options) && typeof option.options[0] === "object"
+      ? (option.options as Array<{ label: string; value: any }>).map(opt => opt.label)
+      : (option.options as string[]);
+    
+    this.addSelectInput(
+      camelToTitle(option.name),
+      option.defaultValue,
+      optionLabels,
+      (newLabel: string) => {
+        // For option objects, find the corresponding numeric value.
+        const selectedOption = (option.options as Array<{ label: string; value: any }>)
+          .find(opt => opt.label === newLabel);
+        if (selectedOption) {
+          const updatedOptions = buildOptions(option.valuePath, selectedOption.value);
+          trendTrace.applyOptions(updatedOptions);
+          console.log(`Updated ${option.name} to: ${selectedOption.value}`);
+        }
+      }
+    );
+  }
+  // (Color options are handled in the color submenu.)
+});
+
+// Back to Trend Trace Menu
+this.addMenuItem(
+  "⤝ Trend Trace Menu",
+  () => this.populateTrendTraceMenu(event, trendTrace),
+  false
+);
+this.showMenu(event);
+}}

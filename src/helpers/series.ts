@@ -1,4 +1,4 @@
-import { ISeriesApi,  WhitespaceData, SeriesType, DeepPartial, SeriesOptionsCommon, LineSeriesOptions, HistogramSeriesOptions, AreaSeriesOptions, BarSeriesOptions, LineStyle, LineWidth, Time, AreaData, BarData, CandlestickData, HistogramData, LineData } from "lightweight-charts";
+import { ISeriesApi,  WhitespaceData, SeriesType, DeepPartial, SeriesOptionsCommon, LineSeriesOptions, HistogramSeriesOptions, AreaSeriesOptions, BarSeriesOptions, LineStyle, LineWidth, Time, AreaData, BarData, CandlestickData, HistogramData, LineData, MouseEventParams } from "lightweight-charts";
 import { CandleShape } from "../ohlc-series/data";
 import { ISeriesApiExtended, OhlcSeriesOptions } from "./general";
 import { isOHLCData, isSingleValueData, isWhitespaceData } from "./typeguards";
@@ -393,4 +393,106 @@ export enum SeriesTypeEnum {
   Ohlc = "Ohlc",
   Trade = "Trade"
 
+}
+
+
+
+/**
+ * Attempts to locate a series near the current cursor (within a percentage threshold).
+ * This version extracts `MouseEventParams` from `handler.ContextMenu.getMouseEventParams()`.
+ *
+ * @param handler - The chart/series handler that provides reference for coordinate->price conversion.
+ * @param thresholdPct - The maximum percentage difference allowed to consider a series "close".
+ * @returns The nearest ISeriesApi<SeriesType> if found, or null otherwise.
+ */
+export function getProximitySeries(
+  handler: Handler,
+  thresholdPct = 3.33
+): ISeriesApi<SeriesType> | null {
+  // 1) Obtain MouseEventParams
+  const mouseEventParams: MouseEventParams | null = handler.ContextMenu.getMouseEventParams();
+
+  // 2) Basic checks
+  if (!mouseEventParams) {
+      console.warn("No MouseEventParams available. Param is null/undefined.");
+      return null;
+  }
+
+  if (!mouseEventParams.seriesData) {
+      console.warn("No seriesData in MouseEventParams. Possibly not hovering over any series data.");
+      return null;
+  }
+
+  if (!mouseEventParams.point) {
+      console.warn("No 'point' (x,y) in MouseEventParams, cannot compute proximity.");
+      return null;
+  }
+
+  // 3) Convert the cursor Y-coordinate to a price using some "source" series
+  const sourceSeries = handler.series ?? handler._seriesList?.[0];
+  if (!sourceSeries) {
+      console.warn("No series reference available in handler.");
+      return null;
+  }
+
+  const cursorY = mouseEventParams.point.y;
+  const cursorPrice = sourceSeries.coordinateToPrice(cursorY);
+  if (cursorPrice === null) {
+      console.warn("cursorPrice is null. Unable to determine proximity.");
+      return null;
+  }
+
+  // 4) Gather potential series within threshold
+  const seriesByDistance: { distance: number; series: ISeriesApi<SeriesType> }[] = [];
+
+  mouseEventParams.seriesData.forEach((data, series) => {
+      let refPrice: number | undefined;
+
+      // Single-value data: { value: number }
+      if (isSingleValueData(data)) {
+          refPrice = data.value;
+      }
+      // OHLC data: { open, high, low, close }
+      else if (isOHLCData(data)) {
+          refPrice = data.close;
+      }
+
+      if (refPrice !== undefined && !isNaN(refPrice)) {
+          const distance = Math.abs(refPrice - cursorPrice);
+          const percentageDifference = (distance / cursorPrice) * 100;
+
+          if (percentageDifference <= thresholdPct) {
+              seriesByDistance.push({ distance, series });
+          }
+      }
+  });
+
+  // 5) Sort by ascending distance
+  seriesByDistance.sort((a, b) => a.distance - b.distance);
+
+  // 6) Return the closest series if any
+  if (seriesByDistance.length > 0) {
+      console.log("Closest series found:", seriesByDistance[0].series);
+      return seriesByDistance[0].series;
+  }
+
+  console.log("No series found within proximity threshold.");
+  return null;
+}
+
+
+
+// A helper that, given a “default” object, picks only those keys 
+// from an incoming options object that are present in the default.
+export function pickCommonOptions<T extends object>(
+  defaults: T,
+  opts: Partial<any>
+): Partial<T> {
+  const result: Partial<T> = {};
+  for (const key in defaults) {
+    if (Object.prototype.hasOwnProperty.call(opts, key)) {
+      result[key as keyof T] = opts[key];
+    }
+  }
+  return result;
 }

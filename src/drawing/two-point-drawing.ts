@@ -2,13 +2,14 @@ import { Point } from './data-source';
 import { DrawingOptions, defaultOptions } from './options';
 import { Drawing } from './drawing';
 import { TwoPointDrawingPaneView } from './pane-view';
+import { ISeriesPrimitive } from 'lightweight-charts';
 
 
 export abstract class TwoPointDrawing extends Drawing {
     _paneViews: TwoPointDrawingPaneView[] = [];
 
     protected _hovered: boolean = false;
-
+    public linkedObjects: ISeriesPrimitive[] = []
     constructor(
         p1: Point,
         p2: Point,

@@ -3,7 +3,7 @@ import { ISeriesApiExtended, decorateSeries } from "./general";
 import { Legend } from "../general/legend";
 import { LegendSeries, LegendPrimitive, LegendGroup, LegendItem } from "../general";
 import { FillArea } from "../fill-area/fill-area";
-import { CandleShape } from "../ohlc-series/data";
+import { CandleShape, ohlcSeriesData } from "../ohlc-series/data";
 export function isSolidColor(background: Background): background is SolidColor {
   return background.type === ColorType.Solid;
 }
@@ -23,7 +23,7 @@ export function isSingleValueData(
 
 export function isOHLCData(
   data: any
-): data is BarData<Time> | CandlestickData<Time> | OhlcData<Time> {
+): data is BarData<Time> | CandlestickData<Time> | OhlcData<Time> | ohlcSeriesData{
   return "close" in data && "open" in data && "high" in data && "low" in data;
 }
 
@@ -108,10 +108,8 @@ export interface SeriesTypeToDataMap {
  */
 export function isFillArea(primitive: ISeriesPrimitive | FillArea): primitive is FillArea {
   return (
-    (primitive as FillArea).options !== undefined && 
     (primitive as FillArea).options.originColor !== null &&
-    (primitive as FillArea).options.destinationColor !== null &&
-    (primitive as FillArea).options.lineWidth !== null
+    (primitive as FillArea).options.destinationColor !== null 
   );
 }
 
