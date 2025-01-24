@@ -410,6 +410,7 @@ export class Handler {
         const ohlcCustomSeries = this.chart.addCustomSeries(Instance, {
             ...filteredOptions,
             chandelierSize,
+            title: name
         });
 
         const decorated = decorateSeries(ohlcCustomSeries, this.legend);

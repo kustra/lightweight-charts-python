@@ -374,6 +374,12 @@ export class VolumeProfile
     } else {
       this._onMouseUp();
     }
+    this.sliceData();
+    this._vpData = this.calculateVolumeProfile();
+
+    // Force re-render
+    this.update();
+
   };
 
   private _onMouseDown(): void {
@@ -1079,8 +1085,9 @@ export class VolumeProfileRenderer
     h: number,
     r: number
   ): void {
-    const rFinal = Math.min(r, w / 2, h / 2); // Ensure radius doesn't exceed dimensions
+    const rFinal = Math.abs(Math.min(r, w / 2, h / 2)); // Ensure radius doesn't exceed dimensions
     ctx.beginPath();
+    if (w> 0 && r> 0) {
     if (this.options.rightSide) {
       // Round top-left and bottom-left corners
       ctx.moveTo(x + rFinal, y);
@@ -1101,5 +1108,6 @@ export class VolumeProfileRenderer
       ctx.lineTo(x, y);
     }
     ctx.closePath();
+  }else {return}
   }
 }

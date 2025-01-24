@@ -418,7 +418,7 @@ export class Sequence {
                     wickColor,
                     lineStyle: this._options.lineStyle,
                     lineWidth: this._options.lineWidth,
-                    shape: this._options.shape || 'Rounded' as CandleShape
+                    shape: this._options.shape??'Rounded' as CandleShape
                 };
             } else {
                 // Single-value data
@@ -492,14 +492,8 @@ export class Sequence {
                 (currentWidth, bar) => bar.lineWidth ?? bar.originalData?.lineWidth ?? currentWidth,
                 this._options.lineWidth ?? 1
             );
-            const shape = bucket.reduce<CandleShape>((currentShape, bar) => {
-                const parsedShape = bar.shape
-                    ? parseCandleShape(bar.shape)
-                    : bar.originalData?.shape
-                    ? parseCandleShape(bar.originalData.shape)
-                    : undefined;
-                return parsedShape ?? currentShape;
-            }, this._options?.shape ?? 'Rounded' as CandleShape);
+            const shape = this._options.shape??"Rounded" as CandleShape
+
 
             return {
                 open: openPrice,
@@ -539,25 +533,14 @@ export class Sequence {
                 (currentWidth, bar) => bar.lineWidth ?? bar.originalData?.lineWidth ?? currentWidth,
                 this._options.lineWidth ?? 1
             );
-            const shape = bucket.reduce<CandleShape>((currentShape, bar) => {
-                const parsedShape = bar.shape
-                    ? parseCandleShape(bar.shape)
-                    : bar.originalData?.shape
-                    ? parseCandleShape(bar.originalData.shape)
-                    : undefined;
-                return parsedShape ?? currentShape;
-            }, this._options.shape ?? 'Rectangle' as CandleShape);
+            const shape = this._options.shape??"Rounded" as CandleShape
 
             return {
                 value: openVal,
                 isUp,
                 x1: aggregatedx1,
                 x2: aggregatedx2,
-                isInProgress,
                 color,
-                borderColor,
-                wickColor,
-                shape,
                 lineStyle,
                 lineWidth
             };
