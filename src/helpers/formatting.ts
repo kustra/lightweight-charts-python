@@ -77,4 +77,27 @@ export function convertPoint(
     // we are returning an object with just logical and price.
     return { time, logical, price } as LogicalPoint;
   }
+}/**
+ * Converts an object to JSON while filtering out circular references.
+ * This helper uses a WeakSet to track seen objects.
+ *
+ * @param obj The object to stringify.
+ * @returns A JSON string.
+ */
+export function safeStringify(obj: any): string {
+  const seen = new WeakSet();
+  return JSON.stringify(
+    obj,
+    (key, value) => {
+      if (typeof value === "object" && value !== null) {
+        if (seen.has(value)) {
+          // If this value is already seen, return undefined to omit it.
+          return;
+        }
+        seen.add(value);
+      }
+      return value;
+    },
+    2
+  );
 }

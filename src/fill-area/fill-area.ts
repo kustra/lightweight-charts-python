@@ -77,8 +77,6 @@ export class FillArea extends PluginBase implements ISeriesPrimitive<Time> {
         this.options = {
             ...this.options,
             ...options,
-            originColor: options.originColor || originSeriesColor,
-            destinationColor: options.destinationColor || destinationSeriesColor,
         };
     
         this.calculateBands();

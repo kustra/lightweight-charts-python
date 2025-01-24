@@ -13,63 +13,80 @@ import {
   SolidColor,
   VerticalGradientColor,
   Background,
-} from 'lightweight-charts';
+  HistogramData,
+  ISeriesApi,
+} from "lightweight-charts";
 // ----------------------------------
 // Internal Helpers and Types
 // ----------------------------------
-import { cloneSeriesAsType, SupportedSeriesType } from '../helpers/series';
 import {
+  cloneSeriesAsType,
   ensureExtendedSeries,
+  SupportedSeriesType,
+} from "../helpers/series";
+import {
   isCandleShape,
   isFillArea,
   isOHLCData,
   isSingleValueData,
   isSolidColor,
   isVerticalGradientColor,
-} from '../helpers/typeguards';
+} from "../helpers/typeguards";
 import {
   AreaSeriesOptions,
   BarSeriesOptions,
   ISeriesApiExtended,
   LineSeriesOptions,
   SeriesOptionsExtended,
-} from '../helpers/general';
+} from "../helpers/series";
 
 // ----------------------------------
 // General Modules
 // ----------------------------------
-import { GlobalParams } from '../general/global-params';
-import { Handler } from '../general/handler';
+import { GlobalParams } from "../general/global-params";
+import { Handler } from "../general/handler";
 
 // ----------------------------------
 // Drawing and Chart Extensions
 // ----------------------------------
-import { DrawingTool } from '../drawing/drawing-tool';
-import { Drawing } from '../drawing/drawing';
-import { DrawingOptions } from '../drawing/options';
-import { FillArea, defaultFillAreaOptions } from '../fill-area/fill-area';
+import { DrawingTool } from "../drawing/drawing-tool";
+import { Drawing } from "../drawing/drawing";
+import { DrawingOptions } from "../drawing/options";
+import { FillArea, defaultFillAreaOptions } from "../fill-area/fill-area";
 
 // ----------------------------------
 // UI Components
 // ----------------------------------
-import { ColorPicker } from './color-picker';
-import { ColorPicker as seriesColorPicker } from './color-picker_';
-import { StylePicker } from './style-picker';
+import { ColorPicker } from "./color-picker";
+import { ColorPicker as seriesColorPicker } from "./color-picker_";
+import { StylePicker } from "./style-picker";
 
 // ----------------------------------
 // Specialized Data
 // ----------------------------------
-import { CandleShape } from '../ohlc-series/data';
-import { buildOptions, camelToTitle } from '../helpers/formatting';
-import { DataPoint, TrendTrace, defaultSequenceOptions } from '../trend-trace/trend-trace';
-import { Point as LogicalPoint } from '../drawing/data-source';
-import { TwoPointDrawing } from '../drawing/two-point-drawing';
+import { CandleShape } from "../ohlc-series/data";
+import { buildOptions, camelToTitle } from "../helpers/formatting";
+import { TrendTrace } from "../trend-trace/trend-trace";
+import { Point as LogicalPoint } from "../drawing/data-source";
+import { TwoPointDrawing } from "../drawing/two-point-drawing";
+import {
+  defaultVolumeProfileOptions,
+  VolumeProfile,
+  VolumeProfileOptions,
+} from "../volume-profile/volume-profile";
+import {
+  defaultSequenceOptions,
+  DataPoint,
+  Sequence,
+} from "../trend-trace/sequence";
+import { PluginBase } from "../plugin-base";
 // ----------------------------------
 // If you have actual code referencing commented-out or removed imports,
 // reintroduce them accordingly.
 // ----------------------------------
 
 export let activeMenu: HTMLElement | null = null;
+type priceScale = "left" | "right" | undefined;
 
 interface Item {
   elem: HTMLSpanElement;
@@ -102,9 +119,7 @@ export class ContextMenu {
   public recentSeries: ISeriesApiExtended | null = null;
   public recentDrawing: Drawing | null = null;
 
-  ///private globalTooltipEnabled: boolean = false;
-  ///private Tooltip: TooltipPrimitive | null = null;
-  ///private currentTooltipSeries: ISeriesApiExtended | null = null;
+  private volumeProfile: VolumeProfile | null = null;
 
   constructor(
     private handler: Handler,
@@ -126,23 +141,22 @@ export class ContextMenu {
     //});
 
     this.setupMenu();
-  } 
+  }
   private constraints: Record<
     string,
     { skip?: boolean; min?: number; max?: number }
   > = {
-      baseline: { skip: true },
-      title: { skip: true },
-      PriceLineSource: { skip: true },
-      tickInterval: { min: 0, max: 100 },
-      lastPriceAnimation: { skip: true },
-      lineType: { min: 0, max: 2 },
-      lineStyle: { min: 0, max: 4 },
+    baseline: { skip: true },
+    title: { skip: true },
+    PriceLineSource: { skip: true },
+    tickInterval: { min: 0, max: 100 },
+    lastPriceAnimation: { skip: true },
+    lineType: { min: 0, max: 2 },
+    lineStyle: { min: 0, max: 4 },
 
-      seriesType: { skip: true },
-      chandelierSize: {min: 1}
-
-    };
+    seriesType: { skip: true },
+    chandelierSize: { min: 1 },
+  };
   public setupDrawingTools(saveDrawings: Function, drawingTool: DrawingTool) {
     this.saveDrawings = saveDrawings;
     this.drawingTool = drawingTool;
@@ -200,18 +214,16 @@ export class ContextMenu {
       item.addEventListener(
         "mouseover",
         () =>
-        (timeout = setTimeout(
-          () => action(item.getBoundingClientRect()),
-          100
-        ))
+          (timeout = setTimeout(
+            () => action(item.getBoundingClientRect()),
+            100
+          ))
       );
       item.addEventListener("mouseout", () => clearTimeout(timeout));
     }
 
     this.items.push(item);
   }
-
-
 
   private _onClick(ev: MouseEvent) {
     const target = ev.target as Node;
@@ -234,7 +246,7 @@ export class ContextMenu {
       this.getMouseEventParams()!
     );
     const drawingFromProximity = this.getProximityDrawing(); // Implement this method based on your drawing logic
-    const trendFromProximity = this.getProximityTrendTrace()
+    const trendFromProximity = this.getProximityTrendTrace();
     console.log("Mouse Event Params:", mouseEventParams);
     console.log("Proximity Series:", seriesFromProximity);
     console.log("Proximity Drawing:", drawingFromProximity);
@@ -246,23 +258,24 @@ export class ContextMenu {
       // Right-click on a series
       console.log("Right-click detected on a series (proximity).");
       this.populateSeriesMenu(seriesFromProximity, event);
-      this.recentSeries = seriesFromProximity
+      this.recentSeries = seriesFromProximity;
     } else if (drawingFromProximity) {
       // Right-click on a drawing
       console.log("Right-click detected on a drawing.");
       this.populateDrawingMenu(drawingFromProximity, event);
-      this.recentDrawing = drawingFromProximity
-    }else if (trendFromProximity) {
+      this.recentDrawing = drawingFromProximity;
+    } else if (trendFromProximity) {
       // Right-click on a drawing
       console.log("Right-click detected on a drawing.");
-      this.populateTrendTraceMenu(event,trendFromProximity,);
-    }
-    
-    else if (mouseEventParams?.hoveredSeries) {
+      this.populateTrendTraceMenu(event, trendFromProximity);
+    } else if (mouseEventParams?.hoveredSeries) {
       // Fallback to hovered series
       console.log("Right-click detected on a series (hovered).");
-      this.populateSeriesMenu(mouseEventParams.hoveredSeries as ISeriesApiExtended, event);
-      this.recentSeries = seriesFromProximity
+      this.populateSeriesMenu(
+        mouseEventParams.hoveredSeries as ISeriesApiExtended,
+        event
+      );
+      this.recentSeries = seriesFromProximity;
     } else {
       // Right-click on chart background
       console.log("Right-click detected on the chart background.");
@@ -273,7 +286,6 @@ export class ContextMenu {
     this.showMenu(event);
     event.preventDefault();
     event.stopPropagation(); // Prevent event bubbling
-
   }
 
   // series-context-menu.ts
@@ -288,12 +300,9 @@ export class ContextMenu {
     return null;
   }
 
-
   private getProximityTrendTrace(): TrendTrace | null {
- 
     if (TrendTrace.hoveredObject) {
       return TrendTrace.hoveredObject;
-
     }
     return null;
   }
@@ -340,7 +349,6 @@ export class ContextMenu {
     }[] = [];
 
     param.seriesData.forEach((data, series) => {
-
       let refPrice: number | undefined;
       if (isSingleValueData(data)) {
         refPrice = data.value;
@@ -353,8 +361,11 @@ export class ContextMenu {
         const percentageDifference = (distance / cursorPrice) * 100;
 
         if (percentageDifference <= 3.33) {
-          const extendedSeries = ensureExtendedSeries(series,this.handler.legend)
-          seriesByDistance.push({ distance, series: extendedSeries});
+          const extendedSeries = ensureExtendedSeries(
+            series,
+            this.handler.legend
+          );
+          seriesByDistance.push({ distance, series: extendedSeries });
         }
       }
     });
@@ -383,7 +394,7 @@ export class ContextMenu {
     this.div.style.maxHeight = `400px`;
     this.div.style.overflowY = "auto";
     this.div.style.display = "block";
-    this.div.style.overflowX = "hidden"
+    this.div.style.overflowX = "hidden";
     console.log("Displaying Menu at:", x, y);
 
     activeMenu = this.div;
@@ -408,8 +419,6 @@ export class ContextMenu {
       activeMenu = null;
     }
   }
-
-
 
   private clearAllMenus() {
     this.handlerMap.forEach((handler) => {
@@ -446,19 +455,20 @@ export class ContextMenu {
       onChange,
       min,
       max,
-      step
+      step,
     });
   }
 
   private addCheckbox(
     label: string,
+    value: boolean,
     defaultValue: boolean,
     onChange: (value: boolean) => void
   ): HTMLElement {
     return this.addMenuInput(this.div, {
       type: "boolean",
       label,
-      value: defaultValue,
+      value: value,
       onChange,
     });
   }
@@ -483,6 +493,7 @@ export class ContextMenu {
     config: {
       type: "string" | "color" | "number" | "boolean" | "select" | "hybrid";
       label: string;
+      sublabel?: string;
       value?: any;
       onChange?: (newValue: any) => void;
       action?: () => void;
@@ -531,7 +542,7 @@ export class ContextMenu {
         hybridContainer.style.marginRight = "8px";
 
         const labelElem = document.createElement("span");
-        labelElem.innerText = config.label ? "Axis" : "Action";
+        labelElem.innerText = config.sublabel ?? "Action";
         labelElem.style.flex = "1";
         hybridContainer.appendChild(labelElem);
 
@@ -581,7 +592,8 @@ export class ContextMenu {
         // Clicking the hybrid container toggles the dropdown
         hybridContainer.addEventListener("click", (event) => {
           event.stopPropagation(); // Prevent triggering the default action
-          dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
+          dropdown.style.display =
+            dropdown.style.display === "block" ? "none" : "block";
         });
 
         // Ensure the default action happens when clicking outside the hybrid container
@@ -607,9 +619,6 @@ export class ContextMenu {
         inputElem = menuItem;
         break;
       }
-
-
-
 
       case "number": {
         const input = document.createElement("input");
@@ -664,8 +673,9 @@ export class ContextMenu {
 
       case "select": {
         const select = document.createElement("select");
-        select.id = `${idPrefix}${config.label ? config.label.toLowerCase() : "select"
-          }`;
+        select.id = `${idPrefix}${
+          config.label ? config.label.toLowerCase() : "select"
+        }`;
         select.style.backgroundColor = "#2b2b2b"; // Darker gray background
         select.style.color = "#fff"; // White text
         select.style.border = "1px solid #444"; // Subtle border
@@ -674,13 +684,12 @@ export class ContextMenu {
         select.style.marginRight = "8px"; // Adds margin to the right of the dropdown
         select.style.width = "80px"; // Ensures consistent width for dropdown
 
-
         config.options?.forEach((optionValue) => {
           const option = document.createElement("option");
           option.value = optionValue;
           option.text = optionValue;
           option.style.whiteSpace = "normal"; // Allow wrapping within dropdown
-          option.style.textAlign = "right"
+          option.style.textAlign = "right";
           if (optionValue === config.value) option.selected = true;
           select.appendChild(option);
         });
@@ -703,7 +712,7 @@ export class ContextMenu {
         input.style.border = "1px solid #444"; // Subtle border
         input.style.borderRadius = "4px";
         input.style.marginLeft = "auto";
-        input.style.textAlign = "center"
+        input.style.textAlign = "center";
         input.style.marginRight = "8px"; // Adds margin to the right of the text input
         input.style.width = "60px"; // Ensures consistent width
         input.addEventListener("input", (event) => {
@@ -741,7 +750,6 @@ export class ContextMenu {
     parent.appendChild(container);
     return container;
   }
-
 
   private addMenuItem(
     text: string,
@@ -811,8 +819,6 @@ export class ContextMenu {
     this.items = [];
   }
 
-
-
   /**
    * Unified color picker menu item.
    * @param label Display label for the menu item
@@ -841,7 +847,10 @@ export class ContextMenu {
     menuItem.addEventListener("click", (event: MouseEvent) => {
       event.stopPropagation();
       if (!this.colorPicker) {
-        this.colorPicker = new seriesColorPicker(currentColor ?? '#000000', applyColor);
+        this.colorPicker = new seriesColorPicker(
+          currentColor ?? "#000000",
+          applyColor
+        );
       }
       this.colorPicker.openMenu(event, 225, applyColor);
     });
@@ -851,10 +860,7 @@ export class ContextMenu {
 
   // Class-level arrays to store current options for width and style.
   private currentWidthOptions: {
-    name: keyof (LineSeriesOptions &
-      BarSeriesOptions &
-      AreaSeriesOptions
-    );
+    name: keyof (LineSeriesOptions & BarSeriesOptions & AreaSeriesOptions);
     label: string;
     min?: number;
     max?: number;
@@ -862,15 +868,11 @@ export class ContextMenu {
   }[] = [];
 
   private currentStyleOptions: {
-    name: keyof (LineSeriesOptions &
-      BarSeriesOptions &
-      AreaSeriesOptions
-    );
+    name: keyof (LineSeriesOptions & BarSeriesOptions & AreaSeriesOptions);
     label: string;
     value: string | number;
     options?: string[];
   }[] = [];
-
 
   /**
    * Populates the clone series submenu.
@@ -879,21 +881,20 @@ export class ContextMenu {
    * @param event - The mouse event triggering the context menu.
    */
 
-
   private populateSeriesMenu(
     series: ISeriesApiExtended,
     event: MouseEvent
   ): void {
     // Type guard to check if series is extended
-    const _series = ensureExtendedSeries(series, this.handler.legend)
+    const _series = ensureExtendedSeries(series, this.handler.legend);
 
     // Now `series` is guaranteed to be extended
     const seriesOptions = series.options() as Partial<
       LineSeriesOptions &
-      BarSeriesOptions &
-      AreaSeriesOptions &
-      CandlestickSeriesOptions &
-      SeriesOptionsExtended
+        BarSeriesOptions &
+        AreaSeriesOptions &
+        CandlestickSeriesOptions &
+        SeriesOptionsExtended
     >;
 
     if (!seriesOptions) {
@@ -909,9 +910,7 @@ export class ContextMenu {
 
     // Temporary arrays before assigning to class-level variables
     const tempWidthOptions: {
-      name: keyof (LineSeriesOptions &
-        BarSeriesOptions &
-        AreaSeriesOptions);
+      name: keyof (LineSeriesOptions & BarSeriesOptions & AreaSeriesOptions);
       label: string;
       value: number;
       min?: number;
@@ -920,24 +919,18 @@ export class ContextMenu {
     }[] = [];
 
     const tempStyleOptions: {
-      name: keyof (LineSeriesOptions &
-        BarSeriesOptions &
-        AreaSeriesOptions
-      );
+      name: keyof (LineSeriesOptions & BarSeriesOptions & AreaSeriesOptions);
       label: string;
       value: string | number;
       options?: string[];
     }[] = [];
 
     for (const optionName of Object.keys(seriesOptions) as Array<
-      keyof (LineSeriesOptions &
-        BarSeriesOptions &
-        AreaSeriesOptions
-      )
+      keyof (LineSeriesOptions & BarSeriesOptions & AreaSeriesOptions)
     >) {
       const optionValue = seriesOptions[optionName];
       if (this.shouldSkipOption(optionName)) continue;
-      if (optionName.toLowerCase().includes("base")) continue;
+      if ((optionName as string).toLowerCase().includes("base")) continue;
 
       const lowerOptionName = camelToTitle(optionName).toLowerCase();
       const isWidthOption =
@@ -954,16 +947,16 @@ export class ContextMenu {
           );
         }
       } else if (isWidthOption) {
-        if (typeof optionValue === 'number') {
+        if (typeof optionValue === "number") {
           let minVal = 1;
           let maxVal = 10;
           let step = 1;
 
           // If this property is specifically "radius", make it 0..1
-          if (lowerOptionName.includes('radius')) {
+          if (lowerOptionName.includes("radius")) {
             minVal = 0;
             maxVal = 1;
-            step = 0.1
+            step = 0.1;
           }
 
           // Add it to your "width" options array with the specialized range
@@ -973,12 +966,10 @@ export class ContextMenu {
             value: optionValue,
             min: minVal,
             max: maxVal,
-            step: step
+            step: step,
           });
         }
-      }
-
-      else if (
+      } else if (
         lowerOptionName.includes("visible") ||
         lowerOptionName.includes("visibility")
       ) {
@@ -993,7 +984,9 @@ export class ContextMenu {
       } else if (optionName === "lineType") {
         // lineType is a style option
         // LineType: Simple=0, WithSteps=1
-        const possibleLineTypes = this.getPredefinedOptions(camelToTitle(optionName))!;
+        const possibleLineTypes = this.getPredefinedOptions(
+          camelToTitle(optionName)
+        )!;
         tempStyleOptions.push({
           name: optionName,
           label: optionName,
@@ -1036,23 +1029,28 @@ export class ContextMenu {
             options: possibleStyles,
           });
         }
-      }// Example: handle shape if "shape" is in the name
-      else if (lowerOptionName.includes('shape')) {
+      } // Example: handle shape if "shape" is in the name
+      else if (lowerOptionName.includes("shape")) {
         // If we confirm it's a recognized CandleShape
         if (isCandleShape(optionValue)) {
-          const predefinedShapes = ['Rectangle', 'Rounded', 'Ellipse', 'Arrow', '3d', 'Polygon'];
+          const predefinedShapes = [
+            "Rectangle",
+            "Rounded",
+            "Ellipse",
+            "Arrow",
+            "3d",
+            "Polygon",
+          ];
           if (predefinedShapes) {
             tempStyleOptions.push({
               name: optionName,
               label: optionName,
-              value: optionValue as CandleShape,  // This is guaranteed CandleShape now
+              value: optionValue as CandleShape, // This is guaranteed CandleShape now
               options: predefinedShapes,
             });
           }
         }
-      }
-
-      else {
+      } else {
         // Other options go directly to otherOptions
         otherOptions.push({ label: optionName, value: optionValue });
       }
@@ -1222,16 +1220,29 @@ export class ContextMenu {
       }
     });
 
+    // Add "Price Scale Options" Menu
+    this.addMenuItem(
+      "Price Scale Options ▸",
+      () => {
+        this.populatePriceScaleMenu(
+          event,
+          (series.options().priceScaleId ?? "right") as priceScale,
+          series
+        );
+      },
+      false,
+      true
+    );
 
     // Add the "Primitives" submenu
     this.addMenuItem(
       "Primitives ▸",
       () => {
-          this.populatePrimitivesMenu(_series, event);
+        this.populatePrimitivesMenu(_series, event);
       },
       false,
       true
-  );
+    );
 
     // Add remaining existing menu items
     this.addMenuItem(
@@ -1245,10 +1256,15 @@ export class ContextMenu {
 
     this.showMenu(event);
   }
-  
+
   private populateDrawingMenu(drawing: Drawing, event: MouseEvent): void {
     this.div.innerHTML = ""; // Clear existing menu items
-    if (!this.drawingTool) { this.drawingTool = new DrawingTool(this.handler.chart, this.handler._seriesList[0]); }
+    if (!this.drawingTool) {
+      this.drawingTool = new DrawingTool(
+        this.handler.chart,
+        this.handler._seriesList[0]
+      );
+    }
     // Add drawing-specific menu items
     for (const optionName of Object.keys(drawing._options)) {
       let subMenu;
@@ -1269,28 +1285,33 @@ export class ContextMenu {
         subMenu._div.style.display = "none";
       });
     }
-
-    
-  // --- Conditionally add the "Trend Trace" menu items ---  
-  if (drawing.points[0] && drawing.points[1]) {
-    // Loop over the linked objects from drawing (casting to TwoPointDrawing)
-    (drawing as TwoPointDrawing).linkedObjects.forEach(object => {
-      // Check if the object is a TrendTrace instance.
-      if (object instanceof TrendTrace) {
-        // Add a menu item with the label that includes trendtrace._source.title.
-        this.addMenuItem(
-          `${object.title} Options`,
-          () => {
-            this.populateTrendTraceMenu(event, object as TrendTrace);
-          },
-          false,
-          true
-        );
+    if (drawing.points?.length >= 2 && drawing.points[0] && drawing.points[1]) {
+      const twoPointDrawing = drawing as TwoPointDrawing;
+      if (twoPointDrawing.linkedObjects?.length) {
+        twoPointDrawing.linkedObjects.forEach((object: PluginBase) => {
+          if (object instanceof TrendTrace) {
+            this.addMenuItem(
+              `${object.title} Options`,
+              () => {
+                this.populateTrendTraceMenu(event, object as TrendTrace);
+              },
+              false,
+              true
+            );
+          } else if (object instanceof VolumeProfile) {
+            this.addMenuItem(
+              `Volume Profile Options`,
+              () => {
+                this.populateVolumeProfileMenu(event, object as VolumeProfile);
+              },
+              false,
+              true
+            );
+          }
+        });
       }
-    });
 
-
-
+      // Always add the creation menu items for Trend Trace and Volume Profile
       this.addMenuItem(
         "Trend Trace ▸",
         () => {
@@ -1299,12 +1320,22 @@ export class ContextMenu {
         false,
         true
       );
+
+      this.addMenuItem(
+        "Volume Profile ▸",
+        () => {
+          this._createVolumeProfile(event, drawing as TwoPointDrawing);
+        },
+        false,
+        true
+      );
     }
+
     const onClickDelete = () => this.drawingTool!.delete(drawing);
     this.separator();
     this.menuItem("Delete Drawing", onClickDelete);
 
-    // Optionally, add a back button or main menu option
+    // Optionally, add a back button or main menu option.
     this.addMenuItem(
       "⤝ Main Menu",
       () => {
@@ -1324,10 +1355,16 @@ export class ContextMenu {
     this.addMenuItem(
       " ~ Series List",
       () => {
-        this.populateSeriesListMenu(event, false, (destinationSeries: ISeriesApiExtended) => {
-          this.populateSeriesMenu(destinationSeries, event)
-        })
-      }, false, true
+        this.populateSeriesListMenu(
+          event,
+          false,
+          (destinationSeries: ISeriesApiExtended) => {
+            this.populateSeriesMenu(destinationSeries, event);
+          }
+        );
+      },
+      false,
+      true
     );
 
     // Layout menu
@@ -1361,6 +1398,45 @@ export class ContextMenu {
       false,
       true
     );
+    this.addMenuInput(this.div, {
+      type: "hybrid",
+      label: "Display Volume Profile",
+      sublabel: "Settings",
+      hybridConfig: {
+        defaultAction: () => {
+          if (!this.volumeProfile) {
+            // Attach VolumeProfile
+            this.volumeProfile = new VolumeProfile(
+              this.handler,
+              defaultVolumeProfileOptions
+            );
+            this.handler.series.attachPrimitive(
+              this.volumeProfile,
+              "Visible Range Volume Profile",
+              false,
+              true
+            );
+            console.log("[ChartMenu] Attached Volume Profile.");
+          } else {
+            // Detach VolumeProfile
+            this.handler.series.detachPrimitive(this.volumeProfile);
+            this.volumeProfile = null;
+            console.log("[ChartMenu] Detached Volume Profile.");
+          }
+        },
+        options: [
+          {
+            name: "Options",
+            action: () => {
+              if (this.volumeProfile) {
+                this.populateVolumeProfileMenu(event, this.volumeProfile);
+              } else {
+              }
+            },
+          },
+        ],
+      },
+    });
 
     this.showMenu(event);
   }
@@ -1369,7 +1445,10 @@ export class ContextMenu {
     this.div.innerHTML = "";
 
     // Text Color Option
-    const textColorOption = { name: "Text Color", valuePath: "layout.textColor" };
+    const textColorOption = {
+      name: "Text Color",
+      valuePath: "layout.textColor",
+    };
     const initialTextColor =
       (this.getCurrentOptionValue(textColorOption.valuePath) as string) ||
       "#000000";
@@ -1453,13 +1532,18 @@ export class ContextMenu {
     }
 
     // Apply the updated background type
-    this.handler.chart.applyOptions({ layout: { background: updatedBackground } });
+    this.handler.chart.applyOptions({
+      layout: { background: updatedBackground },
+    });
 
     // Repopulate the Layout Menu with the new background type's options
     this.populateLayoutMenu(event);
   }
 
-  private populateWidthMenu(event: MouseEvent, series: ISeriesApiExtended): void {
+  private populateWidthMenu(
+    event: MouseEvent,
+    series: ISeriesApiExtended
+  ): void {
     this.div.innerHTML = ""; // Clear current menu
 
     // Use the stored currentWidthOptions array
@@ -1491,7 +1575,10 @@ export class ContextMenu {
     this.showMenu(event);
   }
 
-  private populatePrimitivesMenu(series: ISeriesApiExtended, event: MouseEvent): void {
+  private populatePrimitivesMenu(
+    series: ISeriesApiExtended,
+    event: MouseEvent
+  ): void {
     this.div.innerHTML = "";
     console.log(`Showing Primitive Menu `);
 
@@ -1504,7 +1591,6 @@ export class ContextMenu {
       false,
       false
     );
-
 
     // Access the primitives
 
@@ -1524,43 +1610,48 @@ export class ContextMenu {
         true
       );
     }
-    
+
+    this.addMenuItem(
+      "Create TrendTrace",
+      () => {
+        this._createTrendTrace(event, this.recentDrawing as TwoPointDrawing);
+      },
+      false,
+      false
+    );
+
+    // Debugging output
+    console.log("Primitives:", primitives);
+
+    // Add "Customize TrendTrace" option if `TrendTrace` is already present
+
+    if (primitives["TrendTrace"]) {
       this.addMenuItem(
-          "Create TrendTrace",
-          () => {
-              this._createTrendTrace(event, this.recentDrawing as TwoPointDrawing );
-          },
-          false,
-          false
+        "Customize TrendTrace",
+        () => {
+          this.populateTrendTraceMenu(event, primitives["TrendTrace"]);
+        },
+        false,
+        true
       );
-  
-
-      // Debugging output
-      console.log("Primitives:", primitives);
-  
-      // Add "Customize TrendTrace" option if `TrendTrace` is already present
-  
-      if (primitives["TrendTrace"]) {
-          this.addMenuItem(
-              "Customize TrendTrace",
-              () => {
-                  this.populateTrendTraceMenu(event,primitives["TrendTrace"]);
-              },
-              false,
-              true
-          );
-      }
+    }
     // Add a Back option
-    this.addMenuItem("⤝ Back", () => {
-      this.populateSeriesMenu(series, event);
-
-    },false,false);
+    this.addMenuItem(
+      "⤝ Back",
+      () => {
+        this.populateSeriesMenu(series, event);
+      },
+      false,
+      false
+    );
 
     this.showMenu(event);
-}
+  }
 
-
-  private populateStyleMenu(event: MouseEvent, series: ISeriesApiExtended): void {
+  private populateStyleMenu(
+    event: MouseEvent,
+    series: ISeriesApiExtended
+  ): void {
     this.div.innerHTML = ""; // Clear the current menu
 
     this.currentStyleOptions.forEach((option) => {
@@ -1576,20 +1667,20 @@ export class ContextMenu {
             // If the option name indicates it's a line style, map string => numeric
             if (option.name.toLowerCase().includes("style")) {
               const lineStyleMap: Record<string, number> = {
-                "Solid":         0,
-                "Dotted":        1,
-                "Dashed":        2,
-                "Large Dashed":  3,
-                "Sparse Dotted": 4
+                Solid: 0,
+                Dotted: 1,
+                Dashed: 2,
+                "Large Dashed": 3,
+                "Sparse Dotted": 4,
               };
               finalValue = lineStyleMap[newValue] ?? 0; // fallback to Solid (0)
             }
             // If the option name indicates it's a line type, map string => numeric
             else if (option.name.toLowerCase().includes("linetype")) {
               const lineTypeMap: Record<string, number> = {
-                "Simple":    0,
-                "WithSteps": 1,
-                "Curved":    2
+                Simple: 0,
+                WithSteps: 1,
+                Curved: 2,
               };
               finalValue = lineTypeMap[newValue] ?? 0; // fallback to Simple (0)
             }
@@ -1597,7 +1688,10 @@ export class ContextMenu {
             // Build the updated options object
             const updatedOptions = buildOptions(option.name, finalValue);
             series.applyOptions(updatedOptions);
-            console.log(`Updated ${option.name} to "${newValue}" =>`, finalValue);
+            console.log(
+              `Updated ${option.name} to "${newValue}" =>`,
+              finalValue
+            );
           }
         );
       } else {
@@ -1606,15 +1700,17 @@ export class ContextMenu {
     });
 
     // Add a Back option
-    this.addMenuItem("⤝ Back", () => {
-      this.populateSeriesMenu(series, event);
-
-    },false,false);
+    this.addMenuItem(
+      "⤝ Back",
+      () => {
+        this.populateSeriesMenu(series, event);
+      },
+      false,
+      false
+    );
 
     this.showMenu(event);
   }
-
-
 
   private populateCloneSeriesMenu(
     series: ISeriesApiExtended,
@@ -1641,7 +1737,12 @@ export class ContextMenu {
       this.addMenuItem(
         `Clone as ${type}`,
         () => {
-          const clonedSeries = cloneSeriesAsType(series, this.handler, type, {});
+          const clonedSeries = cloneSeriesAsType(
+            series,
+            this.handler,
+            type,
+            {}
+          );
           if (clonedSeries) {
             console.log(`Cloned series as ${type}:`, clonedSeries);
           } else {
@@ -1664,9 +1765,6 @@ export class ContextMenu {
 
     this.showMenu(event);
   }
-
-
-
 
   private addTextInput(
     label: string,
@@ -1710,7 +1808,6 @@ export class ContextMenu {
     return container;
   }
 
-
   private populateColorOptionsMenu(
     colorOptions: { label: string; value: string }[],
     series: ISeriesApiExtended,
@@ -1746,17 +1843,11 @@ export class ContextMenu {
     this.div.innerHTML = "";
 
     const seriesOptions = series.options() as Partial<
-      LineSeriesOptions &
-      BarSeriesOptions &
-      AreaSeriesOptions
-
+      LineSeriesOptions & BarSeriesOptions & AreaSeriesOptions
     >;
 
     const visibilityOptionNames: Array<
-      keyof (LineSeriesOptions &
-        BarSeriesOptions &
-        AreaSeriesOptions
-      )
+      keyof (LineSeriesOptions & BarSeriesOptions & AreaSeriesOptions)
     > = ["visible", "crosshairMarkerVisible", "priceLineVisible"];
 
     visibilityOptionNames.forEach((optionName) => {
@@ -1765,6 +1856,8 @@ export class ContextMenu {
         this.addCheckbox(
           camelToTitle(optionName),
           optionValue,
+          optionValue,
+
           (newValue: boolean) => {
             const options = buildOptions(optionName, newValue);
             series.applyOptions(options);
@@ -1855,7 +1948,6 @@ export class ContextMenu {
     this.showMenu(event);
   }
 
-
   private populateGridMenu(event: MouseEvent): void {
     this.div.innerHTML = ""; // Clear the menu
 
@@ -1903,7 +1995,8 @@ export class ContextMenu {
 
     // Iterate over the grid options and dynamically add inputs
     gridOptions.forEach((option) => {
-      const currentValue = this.getCurrentOptionValue(option.valuePath) ?? option.defaultValue;
+      const currentValue =
+        this.getCurrentOptionValue(option.valuePath) ?? option.defaultValue;
 
       if (option.type === "color") {
         this.addColorPickerMenuItem(
@@ -1919,7 +2012,10 @@ export class ContextMenu {
           option.options!,
           (newValue) => {
             const selectedIndex = option.options!.indexOf(newValue);
-            const updatedOptions = buildOptions(option.valuePath!, selectedIndex);
+            const updatedOptions = buildOptions(
+              option.valuePath!,
+              selectedIndex
+            );
             this.handler.chart.applyOptions(updatedOptions);
             console.log(`Updated ${option.name} to: ${newValue}`);
           }
@@ -1927,6 +2023,7 @@ export class ContextMenu {
       } else if (option.type === "boolean") {
         this.addCheckbox(
           camelToTitle(option.name),
+          currentValue,
           currentValue,
           (newValue) => {
             const updatedOptions = buildOptions(option.valuePath!, newValue);
@@ -1948,7 +2045,6 @@ export class ContextMenu {
 
     this.showMenu(event); // Display the updated menu
   }
-
 
   private populateBackgroundMenu(event: MouseEvent): void {
     this.div.innerHTML = "";
@@ -2098,7 +2194,7 @@ export class ContextMenu {
         valuePath: "timeScale.minBarSpacing",
         min: 0.1,
         max: 10,
-        step: 0.1
+        step: 0.1,
       },
       {
         name: "Fix Left Edge",
@@ -2156,6 +2252,7 @@ export class ContextMenu {
         this.addCheckbox(
           camelToTitle(option.name),
           currentValue,
+          currentValue,
           (newValue) => {
             const updatedOptions = buildOptions(option.valuePath!, newValue);
             this.handler.chart.applyOptions(updatedOptions);
@@ -2164,7 +2261,8 @@ export class ContextMenu {
         );
       } else if (option.type === "color") {
         const currentColor =
-          (this.getCurrentOptionValue(option.valuePath!) as string) || "#000000";
+          (this.getCurrentOptionValue(option.valuePath!) as string) ||
+          "#000000";
         this.addColorPickerMenuItem(
           camelToTitle(option.name),
           currentColor,
@@ -2206,92 +2304,117 @@ export class ContextMenu {
         false,
         false
       );
-    }
+    } else {
+      // Dropdown for Price Scale Mode
+      const currentMode: PriceScaleMode =
+        this.handler.chart.priceScale(priceScaleId).options().mode ??
+        PriceScaleMode.Normal;
 
-    // Dropdown for Price Scale Mode
-    const currentMode: PriceScaleMode =
-      this.handler.chart.priceScale(priceScaleId).options().mode ?? PriceScaleMode.Normal;
+      const modeOptions: { label: string; value: PriceScaleMode }[] = [
+        { label: "Normal", value: PriceScaleMode.Normal },
+        { label: "Logarithmic", value: PriceScaleMode.Logarithmic },
+        { label: "Percentage", value: PriceScaleMode.Percentage },
+        { label: "Indexed To 100", value: PriceScaleMode.IndexedTo100 },
+      ];
 
-    const modeOptions: { label: string; value: PriceScaleMode }[] = [
-      { label: "Normal", value: PriceScaleMode.Normal },
-      { label: "Logarithmic", value: PriceScaleMode.Logarithmic },
-      { label: "Percentage", value: PriceScaleMode.Percentage },
-      { label: "Indexed To 100", value: PriceScaleMode.IndexedTo100 },
-    ];
+      const modeLabels = modeOptions.map((opt) => opt.label);
 
-    const modeLabels = modeOptions.map((opt) => opt.label);
-
-    this.addSelectInput(
-      "Price Scale Mode",
-      modeOptions.find((opt) => opt.value === currentMode)?.label || "Normal", // Current value label
-      modeLabels, // Dropdown options (labels)
-      (newLabel: string) => {
-        const selectedOption = modeOptions.find((opt) => opt.label === newLabel);
-        if (selectedOption) {
-          this.applyPriceScaleOptions(priceScaleId, { mode: selectedOption.value });
-          console.log(`Price scale (${priceScaleId}) mode set to: ${newLabel}`);
-          this.populatePriceScaleMenu(event, priceScaleId, series); // Refresh the menu
+      this.addSelectInput(
+        "Price Scale Mode",
+        modeOptions.find((opt) => opt.value === currentMode)?.label || "Normal", // Current value label
+        modeLabels, // Dropdown options (labels)
+        (newLabel: string) => {
+          const selectedOption = modeOptions.find(
+            (opt) => opt.label === newLabel
+          );
+          if (selectedOption) {
+            this.applyPriceScaleOptions(priceScaleId, {
+              mode: selectedOption.value,
+            });
+            console.log(
+              `Price scale (${priceScaleId}) mode set to: ${newLabel}`
+            );
+            this.populatePriceScaleMenu(event, priceScaleId, series); // Refresh the menu
+          }
         }
-      }
-    );
-
-    // Additional Price Scale Options
-    const options = this.handler.chart.priceScale(priceScaleId).options();
-    const additionalOptions = [
-      {
-        name: "Auto Scale",
-        value: options.autoScale ?? true,
-        action: (newValue: boolean) => {
-          this.applyPriceScaleOptions(priceScaleId, { autoScale: newValue });
-          console.log(`Price scale (${priceScaleId}) autoScale set to: ${newValue}`);
-        },
-      },
-      {
-        name: "Invert Scale",
-        value: options.invertScale ?? false,
-        action: (newValue: boolean) => {
-          this.applyPriceScaleOptions(priceScaleId, { invertScale: newValue });
-          console.log(`Price scale (${priceScaleId}) invertScale set to: ${newValue}`);
-        },
-      },
-      {
-        name: "Align Labels",
-        value: options.alignLabels ?? true,
-        action: (newValue: boolean) => {
-          this.applyPriceScaleOptions(priceScaleId, { alignLabels: newValue });
-          console.log(`Price scale (${priceScaleId}) alignLabels set to: ${newValue}`);
-        },
-      },
-      {
-        name: "Border Visible",
-        value: options.borderVisible ?? true,
-        action: (newValue: boolean) => {
-          this.applyPriceScaleOptions(priceScaleId, { borderVisible: newValue });
-          console.log(`Price scale (${priceScaleId}) borderVisible set to: ${newValue}`);
-        },
-      },
-      {
-        name: "Ticks Visible",
-        value: options.ticksVisible ?? false,
-        action: (newValue: boolean) => {
-          this.applyPriceScaleOptions(priceScaleId, { ticksVisible: newValue });
-          console.log(`Price scale (${priceScaleId}) ticksVisible set to: ${newValue}`);
-        },
-      },
-    ];
-
-    additionalOptions.forEach((opt) => {
-      this.addMenuItem(
-        `${opt.name}: ${opt.value ? "On" : "Off"}`,
-        () => {
-          const newValue = !opt.value; // Toggle the current value
-          opt.action(newValue);
-          this.populatePriceScaleMenu(event, priceScaleId, series); // Refresh the menu
-        },
-        false,
-        false
       );
-    });
+
+      // Additional Price Scale Options
+      const options = this.handler.chart.priceScale(priceScaleId).options();
+      const additionalOptions = [
+        {
+          name: "Auto Scale",
+          value: options.autoScale ?? true,
+          action: (newValue: boolean) => {
+            this.applyPriceScaleOptions(priceScaleId, { autoScale: newValue });
+            console.log(
+              `Price scale (${priceScaleId}) autoScale set to: ${newValue}`
+            );
+          },
+        },
+        {
+          name: "Invert Scale",
+          value: options.invertScale ?? false,
+          action: (newValue: boolean) => {
+            this.applyPriceScaleOptions(priceScaleId, {
+              invertScale: newValue,
+            });
+            console.log(
+              `Price scale (${priceScaleId}) invertScale set to: ${newValue}`
+            );
+          },
+        },
+        {
+          name: "Align Labels",
+          value: options.alignLabels ?? true,
+          action: (newValue: boolean) => {
+            this.applyPriceScaleOptions(priceScaleId, {
+              alignLabels: newValue,
+            });
+            console.log(
+              `Price scale (${priceScaleId}) alignLabels set to: ${newValue}`
+            );
+          },
+        },
+        {
+          name: "Border Visible",
+          value: options.borderVisible ?? true,
+          action: (newValue: boolean) => {
+            this.applyPriceScaleOptions(priceScaleId, {
+              borderVisible: newValue,
+            });
+            console.log(
+              `Price scale (${priceScaleId}) borderVisible set to: ${newValue}`
+            );
+          },
+        },
+        {
+          name: "Ticks Visible",
+          value: options.ticksVisible ?? false,
+          action: (newValue: boolean) => {
+            this.applyPriceScaleOptions(priceScaleId, {
+              ticksVisible: newValue,
+            });
+            console.log(
+              `Price scale (${priceScaleId}) ticksVisible set to: ${newValue}`
+            );
+          },
+        },
+      ];
+
+      additionalOptions.forEach((opt) => {
+        this.addMenuItem(
+          `${opt.name}: ${opt.value ? "On" : "Off"}`,
+          () => {
+            const newValue = !opt.value; // Toggle the current value
+            opt.action(newValue);
+            this.populatePriceScaleMenu(event, priceScaleId, series); // Refresh the menu
+          },
+          false,
+          false
+        );
+      });
+    }
 
     // Back to Main Menu
     this.addMenuItem(
@@ -2304,7 +2427,6 @@ export class ContextMenu {
 
     this.showMenu(event); // Display the updated menu
   }
-
 
   private applyPriceScaleOptions(
     priceScaleId: "left" | "right",
@@ -2340,7 +2462,6 @@ export class ContextMenu {
     return options;
   }
 
-
   private setBackgroundType(event: MouseEvent, type: ColorType): void {
     const currentBackground = this.handler.chart.options().layout?.background;
     let updatedBackground: Background;
@@ -2352,15 +2473,15 @@ export class ContextMenu {
     } else if (type === ColorType.VerticalGradient) {
       updatedBackground = isVerticalGradientColor(currentBackground)
         ? {
-          type: ColorType.VerticalGradient,
-          topColor: currentBackground.topColor,
-          bottomColor: currentBackground.bottomColor,
-        }
+            type: ColorType.VerticalGradient,
+            topColor: currentBackground.topColor,
+            bottomColor: currentBackground.bottomColor,
+          }
         : {
-          type: ColorType.VerticalGradient,
-          topColor: "rgba(255,0,0,.2)",
-          bottomColor: "rgba(0,255,0,.2)",
-        };
+            type: ColorType.VerticalGradient,
+            topColor: "rgba(255,0,0,.2)",
+            bottomColor: "rgba(0,255,0,.2)",
+          };
     } else {
       console.error(`Unsupported ColorType: ${type}`);
       return;
@@ -2384,35 +2505,62 @@ export class ContextMenu {
       );
     }
   }
-  private startFillAreaBetween(event: MouseEvent, originSeries: ISeriesApiExtended): void {
-    console.log("Fill Area Between started. Origin series set:", originSeries.options().title);
+  private startFillAreaBetween(
+    event: MouseEvent,
+    originSeries: ISeriesApiExtended
+  ): void {
+    console.log(
+      "Fill Area Between started. Origin series set:",
+      originSeries.options().title
+    );
 
     // Ensure the series is decorated
 
     // Populate the Series List Menu
-    this.populateSeriesListMenu(event, false, (destinationSeries: ISeriesApiExtended) => {
-      if (destinationSeries && destinationSeries !== originSeries) {
-        console.log("Destination series selected:", destinationSeries.options().title);
+    this.populateSeriesListMenu(
+      event,
+      false,
+      (destinationSeries: ISeriesApiExtended) => {
+        if (destinationSeries && destinationSeries !== originSeries) {
+          console.log(
+            "Destination series selected:",
+            destinationSeries.options().title
+          );
 
-        // Ensure the destination series is also decorated
+          // Ensure the destination series is also decorated
 
-        // Instantiate and attach the FillArea
-        originSeries.primitives["FillArea"] = new FillArea(originSeries, destinationSeries, {
-          ...defaultFillAreaOptions,
-        });
-        originSeries.attachPrimitive(originSeries.primitives['FillArea'], `Fill Area ⥵ ${destinationSeries.options().title}`, false, true)
-        // Attach the FillArea as a primitive
-        //if (!originSeries.primitives['FillArea']) {
-        //  originSeries.attachPrimitive(originSeries.primitives["FillArea"])
-        //}
-        console.log("Fill Area successfully added between selected series.");
-        alert(`Fill Area added between ${originSeries.options().title} and ${destinationSeries.options().title}`);
-      } else {
-        alert("Invalid selection. Please choose a different series as the destination.");
+          // Instantiate and attach the FillArea
+          originSeries.primitives["FillArea"] = new FillArea(
+            originSeries,
+            destinationSeries,
+            {
+              ...defaultFillAreaOptions,
+            }
+          );
+          originSeries.attachPrimitive(
+            originSeries.primitives["FillArea"],
+            `Fill Area ⥵ ${destinationSeries.options().title}`,
+            false,
+            true
+          );
+          // Attach the FillArea as a primitive
+          //if (!originSeries.primitives['FillArea']) {
+          //  originSeries.attachPrimitive(originSeries.primitives["FillArea"])
+          //}
+          console.log("Fill Area successfully added between selected series.");
+          alert(
+            `Fill Area added between ${originSeries.options().title} and ${
+              destinationSeries.options().title
+            }`
+          );
+        } else {
+          alert(
+            "Invalid selection. Please choose a different series as the destination."
+          );
+        }
       }
-    });
+    );
   }
-
 
   private getPredefinedOptions(label: string): string[] | null {
     const predefined: Record<string, string[]> = {
@@ -2425,14 +2573,8 @@ export class ContextMenu {
         "Sparse Dotted",
       ],
       "Line Type": ["Simple", "WithSteps", "Curved"],
-      "seriesType": ["Line", "Histogram", "Area", "Bar", "Candlestick"],
-      "lineStyle": [
-        "Solid",
-        "Dotted",
-        "Dashed",
-        "Large Dashed",
-        "Sparse Dotted",
-      ],
+      seriesType: ["Line", "Histogram", "Area", "Bar", "Candlestick"],
+      lineStyle: ["Solid", "Dotted", "Dashed", "Large Dashed", "Sparse Dotted"],
       "Price Line Style": [
         "Solid",
         "Dotted",
@@ -2440,10 +2582,16 @@ export class ContextMenu {
         "Large Dashed",
         "Sparse Dotted",
       ],
-      "lineType": ["Simple", "WithSteps", "Curved"],
-      "Shape": ['Rectangle', 'Rounded', 'Ellipse', 'Arrow', '3d', 'Polygon'],
-      "Candle Shape": ['Rectangle', 'Rounded', 'Ellipse', 'Arrow', '3d', 'Polygon']
-
+      lineType: ["Simple", "WithSteps", "Curved"],
+      Shape: ["Rectangle", "Rounded", "Ellipse", "Arrow", "3d", "Polygon"],
+      "Candle Shape": [
+        "Rectangle",
+        "Rounded",
+        "Ellipse",
+        "Arrow",
+        "3d",
+        "Polygon",
+      ],
     };
 
     return predefined[camelToTitle(label)] || null;
@@ -2466,17 +2614,34 @@ export class ContextMenu {
         value: series,
       })
     );
+    // Initialize mainSeries and volumeSeries with null values
 
-    // 2) Optionally prepend `this.handler.series` if it exists
-    let seriesOptions = mappedSeries;
+    // Define the correct types to match the expected structure
+    interface SeriesOption {
+      label: string;
+      value: ISeriesApiExtended;
+    }
+
+    let seriesOptions: SeriesOption[] = [...mappedSeries];
+
+    // Conditionally add the mainSeries and volumeSeries only if they are valid
     if (this.handler.series) {
-      // Only prepend if `this.handler.series` is truthy
-      const mainSeriesItem = {
+      const mainSeries: SeriesOption = {
         label: "Main Series",
         value: this.handler.series,
       };
-      seriesOptions = [mainSeriesItem, ...mappedSeries];
+      seriesOptions = [mainSeries, ...seriesOptions];
     }
+
+    if (this.handler.volumeSeries) {
+      const volumeSeries: SeriesOption = {
+        label: "Volume",
+        value: this.handler.volumeSeries,
+      };
+      seriesOptions = [volumeSeries, ...seriesOptions];
+    }
+
+    console.log(seriesOptions);
 
     // 3) Display series in the menu
     seriesOptions.forEach((option) => {
@@ -2510,13 +2675,15 @@ export class ContextMenu {
       },
       false
     );
-    
+
     // Show the menu at the current mouse position
     this.showMenu(event);
   }
 
-
-  private customizeFillAreaOptions(event: MouseEvent, FillArea: ISeriesPrimitive): void {
+  private customizeFillAreaOptions(
+    event: MouseEvent,
+    FillArea: ISeriesPrimitive
+  ): void {
     this.div.innerHTML = ""; // Clear current menu
     if (isFillArea(FillArea)) {
       // Add color pickers for each color-related option
@@ -2527,27 +2694,28 @@ export class ContextMenu {
         FillArea
       );
 
-
       this.addColorPickerMenuItem(
         "Origin < Destination",
         FillArea.options.destinationColor,
         "destinationColor",
         FillArea
       );
+    }
+    // Back to main menu
+    this.addMenuItem(
+      "⤝ Back to Main Menu",
+      () => this.populateChartMenu(event),
+      false
+    );
 
-    } 
-      // Back to main menu
-      this.addMenuItem("⤝ Back to Main Menu", () => this.populateChartMenu(event), false);
-
-      this.showMenu(event);
-    
+    this.showMenu(event);
   }
-
 
   public addResetViewOption(): void {
     const resetMenuItem = this.addMenuInput(this.div, {
       type: "hybrid",
       label: "∟ Reset",
+      sublabel: "Axis",
       hybridConfig: {
         defaultAction: () => {
           this.handler.chart.timeScale().resetTimeScale();
@@ -2564,92 +2732,126 @@ export class ContextMenu {
           },
         ],
       },
-    })
+    });
     this.div.appendChild(resetMenuItem);
   }
-    /**
-     * Creates a TrendTrace for the given series.
-     *
-     * @param series - The series to which the TrendTrace will be attached.
-     */
+  /**
+   * Creates a TrendTrace for the given series.
+   *
+   * @param series - The series to which the TrendTrace will be attached.
+   */
   public _createTrendTrace(event: MouseEvent, drawing: TwoPointDrawing): void {
-        
-      // Populate the Series List Menu
-      this.populateSeriesListMenu(event, false, (series: ISeriesApiExtended) => {
-        if (series && drawing.p1 && drawing.p2) {
-          console.log("Series selected:", series.options().title);
-          series.primitives['TrendTrace'] = new TrendTrace(this.handler, series, drawing.p1 as LogicalPoint, drawing.p2 as LogicalPoint, defaultSequenceOptions)
-          series.attachPrimitive(series.primitives['TrendTrace'], `${drawing.p1?.logical} ⥵ ${drawing.p2?.logical}`, false, true)
-          console.log("Trend Trace successfully created for selected series.");
-          (drawing as TwoPointDrawing).linkedObjects.push(series.primitives['TrendTrace'])
+    // Populate the Series List Menu
+    this.populateSeriesListMenu(event, false, (series: ISeriesApiExtended) => {
+      if (series && drawing.p1 && drawing.p2) {
+        console.log("Series selected:", series.options().title);
+        series.primitives["TrendTrace"] = new TrendTrace(
+          this.handler,
+          series,
+          drawing.p1 as LogicalPoint,
+          drawing.p2 as LogicalPoint,
+          defaultSequenceOptions
+        );
+        series.attachPrimitive(
+          series.primitives["TrendTrace"],
+          `${drawing.p1?.logical} ⥵ ${drawing.p2?.logical}`,
+          false,
+          true
+        );
+        console.log("Trend Trace successfully created for selected series.");
+        (drawing as TwoPointDrawing).linkedObjects.push(
+          series.primitives["TrendTrace"]
+        );
+      }
+    });
+  }
+  public _createVolumeProfile(
+    event: MouseEvent,
+    drawing: TwoPointDrawing
+  ): void {
+    const series = this.handler.series ?? this.handler._seriesList[0];
+    if (series && drawing.p1 && drawing.p2) {
+      console.log("Series selected:", series.options().title);
 
-          alert(`Trend Trace created for ${series.options().title} `);
-          } 
-          });
-          }
- 
-/**
- * Main entry point for the trend trace menu.
- *
- * @param event - The mouse event that triggered the menu.
- * @param trendTrace - The trend trace instance.
- */
-private populateTrendTraceMenu(event: MouseEvent, trendTrace: TrendTrace): void {
-  this.div.innerHTML = ""; // Clear the menu
+      // Create the VolumeProfile instance in fixed range mode.
+      const volumeProfile = new VolumeProfile(
+        this.handler,
+        defaultVolumeProfileOptions,
+        drawing.p1 as LogicalPoint,
+        drawing.p2 as LogicalPoint
+      );
 
-  this.addMenuItem(
-    "Color Options ▸",
-    () => this.populateTrendColorMenu(event, trendTrace),
-    false,
-    true
-  );
+      // Attach the volume profile primitive to the selected series.
+      series.attachPrimitive(volumeProfile, "Volume Profile", false, true);
+      console.log("Volume Profile successfully created for selected series.");
+      (drawing as TwoPointDrawing).linkedObjects.push(volumeProfile);
+    }
+  }
 
-  this.addMenuItem(
-    "General Options ▸",
-    () => this.populateTrendOptionsMenu(event, trendTrace),
-    false,
-    true
-  );
-  this.addMenuItem(
-    "⤝ Main Menu",
-    () => this.populateChartMenu(event),
-    false
-  );
+  /**
+   * Main entry point for the trend trace menu.
+   *
+   * @param event - The mouse event that triggered the menu.
+   * @param trendTrace - The trend trace instance.
+   */
+  private populateTrendTraceMenu(
+    event: MouseEvent,
+    trendTrace: TrendTrace
+  ): void {
+    this.div.innerHTML = ""; // Clear the menu
 
-  this.showMenu(event);
-}
-// Define a common interface for an option descriptor.
+    this.addMenuItem(
+      "Color Options ▸",
+      () => this.populateTrendColorMenu(event, trendTrace),
+      false,
+      true
+    );
 
+    this.addMenuItem(
+      "General Options ▸",
+      () => this.populateTrendOptionsMenu(event, trendTrace),
+      false,
+      true
+    );
+    this.addMenuItem("⤝ Main Menu", () => this.populateChartMenu(event), false);
 
-/**
- * Populates the submenu for color options.
- *
- * For OHLC data (as determined by isOHLCData), we show OHLC-specific color options;
- * otherwise, we display a single "Line Color" option.
- *
- * This function uses the build-out approach similar to the Time Scale menu.
- *
- * @param event - The mouse event that triggered the menu.
- * @param trendTrace - The TrendTrace instance.
- */
-private populateTrendColorMenu(event: MouseEvent, trendTrace: TrendTrace): void {
-  this.div.innerHTML = ""; // Clear the menu
-  const currentOptions = trendTrace.getOptions();
-  const sequence = trendTrace._sequence;
+    this.showMenu(event);
+  }
+  // Define a common interface for an option descriptor.
 
-  const ohlcData: DataPoint[] = sequence.data ;
-  const isOHLC = ohlcData.every(
-    point =>
-      point.open !== undefined &&
-      point.high !== undefined &&
-      point.low !== undefined &&
-      point.close !== undefined
-  );
+  /**
+   * Populates the submenu for color options.
+   *
+   * For OHLC data (as determined by isOHLCData), we show OHLC-specific color options;
+   * otherwise, we display a single "Line Color" option.
+   *
+   * This function uses the build-out approach similar to the Time Scale menu.
+   *
+   * @param event - The mouse event that triggered the menu.
+   * @param trendTrace - The TrendTrace instance.
+   */
+  private populateTrendColorMenu(
+    event: MouseEvent,
+    trendTrace: TrendTrace
+  ): void {
+    this.div.innerHTML = ""; // Clear the menu
+    const currentOptions = trendTrace.getOptions();
+    const sequence = trendTrace._sequence;
 
-  // Build a list of color options based on the data type.
-  const colorOptions: OptionDescriptor[] = []
-  
-  if (isOHLC) { colorOptions.push(
+    const ohlcData: DataPoint[] = sequence.data;
+    const isOHLC = ohlcData.every(
+      (point) =>
+        point.open !== undefined &&
+        point.high !== undefined &&
+        point.low !== undefined &&
+        point.close !== undefined
+    );
+
+    // Build a list of color options based on the data type.
+    const colorOptions: OptionDescriptor[] = [];
+
+    if (isOHLC) {
+      colorOptions.push(
         {
           name: "Up Color",
           type: "color",
@@ -2685,219 +2887,452 @@ private populateTrendColorMenu(event: MouseEvent, trendTrace: TrendTrace): void 
           type: "color",
           valuePath: "wickDownColor",
           defaultValue: currentOptions.wickDownColor ?? "#d5160c",
-        })}  else colorOptions.push( 
-     
-        {
-          name: "Line Color",
-          type: "color",
-          valuePath: "lineColor",
-          defaultValue: currentOptions.lineColor ?? "#ffffff",
-        },
-        )
-
-  // Iterate over each color option and add it using addColorPickerMenuItem.
-  colorOptions.forEach((option) => {
-    this.addColorPickerMenuItem(
-      camelToTitle(option.name),
-      option.defaultValue,
-      option.valuePath,
-      trendTrace
-    );
-  });
-
-  // Back to Trend Trace Menu
-  this.addMenuItem(
-    "⤝ Trend Trace Menu",
-    () => this.populateTrendTraceMenu(event, trendTrace),
-    false
-  );
-  this.showMenu(event);
-}
-
-
-
-/**
- * Populates the submenu for general options.
- *
- * Logical indices (P1/P2) are always shown.
- * However, appearance options that are relevant only for OHLC data—
- * such as Bar Spacing, Radius, Shape, Show Wicks, Show Borders, and Chandelier Size—
- * are added only if isOHLCData returns true.
- *
- * Each update uses buildOptions.
- *
- * @param event - The mouse event that triggered the menu.
- * @param trendTrace - The TrendTrace instance.
- */
-private populateTrendOptionsMenu(event: MouseEvent, trendTrace: TrendTrace): void {
-  this.div.innerHTML = ""; // Clear the menu
-  const currentOptions = trendTrace.getOptions();
-  const sequence = trendTrace._sequence;
-
-
-  const ohlcData: DataPoint[] = sequence.data ;
-  const isOHLC = ohlcData.every(
-    point =>
-      point.open !== undefined &&
-      point.high !== undefined &&
-      point.low !== undefined &&
-      point.close !== undefined
-  );
-
-// Define the generalOptions array with a consistent option type.
-const generalOptions: Array<{
-  name: string;
-  type: "number" | "boolean" | "select";
-  valuePath: string;
-  defaultValue: any;
-  min?: number;
-  max?: number;
-  step?: number;
-  options?: Array<{ label: string; value: any }> | string[];
-}> = [];
-
-// If the series is OHLC, add appearance options specific to OHLC.
-if (isOHLC) {
-  generalOptions.push(
-    {
-      name: "Bar Spacing",
-      type: "number",
-      valuePath: "barSpacing",
-      defaultValue: currentOptions.barSpacing ?? 0.8,
-      min: 0.1,
-      max: 2,
-      step: 0.1,
-    },
-    {
-      name: "Radius",
-      type: "number",
-      valuePath: "radius",
-      defaultValue: currentOptions.radius ?? 0.6,
-      min: 0,
-      max: 1,
-      step: 0.1,
-    },
-    {
-      name: "Shape",
-      type: "select",
-      valuePath: "shape",
-      defaultValue: currentOptions.shape ?? "Rounded",
-      options: ["Rectangle", "Rounded", "Ellipse", "Arrow", "3d", "Polygon"],
-    },
-    {
-      name: "Show Wicks",
-      type: "boolean",
-      valuePath: "wickVisible",
-      defaultValue: currentOptions.wickVisible ?? true,
-    },
-    {
-      name: "Show Borders",
-      type: "boolean",
-      valuePath: "borderVisible",
-      defaultValue: currentOptions.borderVisible ?? true,
-    },
-    {
-      name: "Chandelier Size",
-      type: "number",
-      valuePath: "chandelierSize",
-      defaultValue: currentOptions.chandelierSize ?? 1,
-      min: 1,
-      max: 100,
-      step: 1,
-    }
-  );
-}
-
-// Always include the following default appearance options.
-
-// Line Style option with numeric mapping.
-generalOptions.push({
-  name: "Line Style",
-  type: "select",
-  valuePath: "lineStyle",
-  defaultValue: currentOptions.lineStyle ?? 0,
-  options: [
-    { label: "Solid",         value: 0 },
-    { label: "Dotted",        value: 1 },
-    { label: "Dashed",        value: 2 },
-    { label: "Large Dashed",  value: 3 },
-    { label: "Sparse Dotted", value: 4 },
-  ],
-});
-
-// Line Width option for adjusting the appearance of the line.
-generalOptions.push({
-  name: "Line Width",
-  type: "number",
-  valuePath: "lineWidth",
-  defaultValue: currentOptions.lineWidth ?? 1,
-  min: 0.5,
-  max: 10,
-  step: 0.5,
-});
-
-  // Visible toggle option. This option is always added.
-  generalOptions.push({
-    name: "Visible",
-    type: "boolean",
-    valuePath: "visible",
-    defaultValue: currentOptions.visible ?? true,
-  });
-// Iterate over each general option and add an input based on its type.
-generalOptions.forEach((option) => {
-  if (option.type === "number") {
-    this.addNumberInput(
-      camelToTitle(option.name),
-      option.defaultValue,
-      (newValue: number) => {
-        const updatedOptions = buildOptions(option.valuePath, newValue);
-        trendTrace.applyOptions(updatedOptions);
-        console.log(`Updated ${option.name} to: ${newValue}`);
-      },
-      option.min,
-      option.max,
-      option.step
-    );
-  } else if (option.type === "boolean") {
-    this.addCheckbox(
-      camelToTitle(option.name),
-      option.defaultValue,
-      (newValue: boolean) => {
-        const updatedOptions = buildOptions(option.valuePath, newValue);
-        trendTrace.applyOptions(updatedOptions);
-        console.log(`Updated ${option.name} to: ${newValue}`);
-      }
-    );
-  } else if (option.type === "select") {
-    // If options are objects, extract their labels.
-    const optionLabels = Array.isArray(option.options) && typeof option.options[0] === "object"
-      ? (option.options as Array<{ label: string; value: any }>).map(opt => opt.label)
-      : (option.options as string[]);
-    
-    this.addSelectInput(
-      camelToTitle(option.name),
-      option.defaultValue,
-      optionLabels,
-      (newLabel: string) => {
-        // For option objects, find the corresponding numeric value.
-        const selectedOption = (option.options as Array<{ label: string; value: any }>)
-          .find(opt => opt.label === newLabel);
-        if (selectedOption) {
-          const updatedOptions = buildOptions(option.valuePath, selectedOption.value);
-          trendTrace.applyOptions(updatedOptions);
-          console.log(`Updated ${option.name} to: ${selectedOption.value}`);
         }
+      );
+    } else
+      colorOptions.push({
+        name: "Line Color",
+        type: "color",
+        valuePath: "lineColor",
+        defaultValue: currentOptions.lineColor ?? "#ffffff",
+      });
+
+    // Iterate over each color option and add it using addColorPickerMenuItem.
+    colorOptions.forEach((option) => {
+      this.addColorPickerMenuItem(
+        camelToTitle(option.name),
+        option.defaultValue,
+        option.valuePath,
+        trendTrace
+      );
+    });
+
+    // Back to Trend Trace Menu
+    this.addMenuItem(
+      "⤝ Trend Trace Menu",
+      () => this.populateTrendTraceMenu(event, trendTrace),
+      false
+    );
+    this.showMenu(event);
+  }
+
+  /**
+   * Populates the submenu for general options.
+   *
+   * Logical indices (P1/P2) are always shown.
+   * However, appearance options that are relevant only for OHLC data—
+   * such as Bar Spacing, Radius, Shape, Show Wicks, Show Borders, and Chandelier Size—
+   * are added only if isOHLCData returns true.
+   *
+   * Each update uses buildOptions.
+   *
+   * @param event - The mouse event that triggered the menu.
+   * @param trendTrace - The TrendTrace instance.
+   */
+  private populateTrendOptionsMenu(
+    event: MouseEvent,
+    trendTrace: TrendTrace
+  ): void {
+    this.div.innerHTML = ""; // Clear the menu
+    const currentOptions = trendTrace.getOptions();
+    const sequence = trendTrace._sequence;
+
+    const ohlcData: DataPoint[] = sequence.data;
+    const isOHLC = ohlcData.every(
+      (point) =>
+        point.open !== undefined &&
+        point.high !== undefined &&
+        point.low !== undefined &&
+        point.close !== undefined
+    );
+
+    // Define the generalOptions array with a consistent option type.
+    const generalOptions: Array<{
+      name: string;
+      type: "number" | "boolean" | "select";
+      valuePath: string;
+      defaultValue: any;
+      min?: number;
+      max?: number;
+      step?: number;
+      options?: Array<{ label: string; value: any }> | string[];
+    }> = [];
+
+    // If the series is OHLC, add appearance options specific to OHLC.
+    if (isOHLC) {
+      generalOptions.push(
+        {
+          name: "Bar Spacing",
+          type: "number",
+          valuePath: "barSpacing",
+          defaultValue: currentOptions.barSpacing ?? 0.8,
+          min: 0.1,
+          max: 2,
+          step: 0.1,
+        },
+        {
+          name: "Radius",
+          type: "number",
+          valuePath: "radius",
+          defaultValue: currentOptions.radius ?? 0.6,
+          min: 0,
+          max: 1,
+          step: 0.1,
+        },
+        {
+          name: "Shape",
+          type: "select",
+          valuePath: "shape",
+          defaultValue: currentOptions.shape ?? "Rounded",
+          options: [
+            "Rectangle",
+            "Rounded",
+            "Ellipse",
+            "Arrow",
+            "3d",
+            "Polygon",
+          ],
+        },
+        {
+          name: "Show Wicks",
+          type: "boolean",
+          valuePath: "wickVisible",
+          defaultValue: currentOptions.wickVisible ?? true,
+        },
+        {
+          name: "Show Borders",
+          type: "boolean",
+          valuePath: "borderVisible",
+          defaultValue: currentOptions.borderVisible ?? true,
+        },
+        {
+          name: "Chandelier Size",
+          type: "number",
+          valuePath: "chandelierSize",
+          defaultValue: currentOptions.chandelierSize ?? 1,
+          min: 1,
+          max: 100,
+          step: 1,
+        },
+        {
+          name: "Auto Aggregate",
+          type: "boolean",
+          valuePath: "autoscale",
+          defaultValue: currentOptions.autoScale ?? true,
+        }
+      );
+    }
+
+    // Always include the following default appearance options.
+
+    // Line Style option with numeric mapping.
+    generalOptions.push({
+      name: "Line Style",
+      type: "select",
+      valuePath: "lineStyle",
+      defaultValue: currentOptions.lineStyle ?? 0,
+      options: [
+        { label: "Solid", value: 0 },
+        { label: "Dotted", value: 1 },
+        { label: "Dashed", value: 2 },
+        { label: "Large Dashed", value: 3 },
+        { label: "Sparse Dotted", value: 4 },
+      ],
+    });
+
+    // Line Width option for adjusting the appearance of the line.
+    generalOptions.push({
+      name: "Line Width",
+      type: "number",
+      valuePath: "lineWidth",
+      defaultValue: currentOptions.lineWidth ?? 1,
+      min: 0.5,
+      max: 10,
+      step: 0.5,
+    });
+
+    // Visible toggle option. This option is always added.
+    generalOptions.push({
+      name: "Visible",
+      type: "boolean",
+      valuePath: "visible",
+      defaultValue: currentOptions.visible ?? true,
+    });
+    // Iterate over each general option and add an input based on its type.
+    generalOptions.forEach((option) => {
+      if (option.type === "number") {
+        this.addNumberInput(
+          camelToTitle(option.name),
+          option.defaultValue,
+          (newValue: number) => {
+            const updatedOptions = buildOptions(option.valuePath, newValue);
+            trendTrace.applyOptions(updatedOptions);
+            console.log(`Updated ${option.name} to: ${newValue}`);
+          },
+          option.min,
+          option.max,
+          option.step
+        );
+      } else if (option.type === "boolean") {
+        this.addCheckbox(
+          camelToTitle(option.name),
+          option.defaultValue,
+          option.defaultValue,
+
+          (newValue: boolean) => {
+            const updatedOptions = buildOptions(option.valuePath, newValue);
+            trendTrace.applyOptions(updatedOptions);
+            console.log(`Updated ${option.name} to: ${newValue}`);
+          }
+        );
+      } else if (option.type === "select") {
+        // If options are objects, extract their labels.
+        const optionLabels =
+          Array.isArray(option.options) && typeof option.options[0] === "object"
+            ? (option.options as Array<{ label: string; value: any }>).map(
+                (opt) => opt.label
+              )
+            : (option.options as string[]);
+
+        this.addSelectInput(
+          camelToTitle(option.name),
+          option.defaultValue,
+          optionLabels,
+          (newLabel: string) => {
+            // For option objects, find the corresponding numeric value.
+            const selectedOption = (
+              option.options as Array<{ label: string; value: any }>
+            ).find((opt) => opt.label === newLabel);
+            if (selectedOption) {
+              const updatedOptions = buildOptions(
+                option.valuePath,
+                selectedOption.value
+              );
+              trendTrace.applyOptions(updatedOptions);
+              console.log(`Updated ${option.name} to: ${selectedOption.value}`);
+            }
+          }
+        );
+      }
+      // (Color options are handled in the color submenu.)
+    });
+    // Add the Export option.
+
+    // Back to Trend Trace Menu.
+    this.addMenuItem(
+      "⤝ Trend Trace Menu",
+      () => this.populateTrendTraceMenu(event, trendTrace),
+      false
+    );
+    this.showMenu(event);
+  }
+
+  private populateVolumeProfileMenu(
+    event: MouseEvent,
+    volumeProfile: VolumeProfile
+  ): void {
+    this.div.innerHTML = ""; // Clear the menu
+
+    const currentOptions = volumeProfile._options;
+
+    // Define a unified array for all option types.
+    const generalOptions: Array<{
+      name: string;
+      type: "number" | "boolean" | "select" | "color";
+      valuePath: string;
+      defaultValue: any;
+      min?: number;
+      max?: number;
+      step?: number;
+      options?: Array<{ label: string; value: any }> | string[];
+    }> = [];
+
+    // Push non-color options.
+    generalOptions.push(
+      {
+        name: "Visible",
+        type: "boolean",
+        valuePath: "visible",
+        defaultValue: currentOptions.visible ?? true,
+      },
+      {
+        name: "Sections",
+        type: "number",
+        valuePath: "sections",
+        defaultValue: currentOptions.sections ?? 20,
+        min: 1,
+        step: 1,
+      },
+      {
+        name: "Right Side",
+        type: "boolean",
+        valuePath: "rightSide",
+        defaultValue: currentOptions.rightSide ?? true,
+      },
+      {
+        name: "Width",
+        type: "number",
+        valuePath: "width",
+        defaultValue: currentOptions.width ?? 30,
+        min: 1,
+        step: 1,
+      },
+      {
+        name: "Line Style",
+        type: "select",
+        valuePath: "lineStyle",
+        defaultValue: currentOptions.lineStyle ?? 0,
+        options: [
+          { label: "Solid", value: 0 },
+          { label: "Dotted", value: 1 },
+          { label: "Dashed", value: 2 },
+          { label: "Large Dashed", value: 3 },
+          { label: "Sparse Dotted", value: 4 },
+        ],
+      },
+      {
+        name: "Draw Grid",
+        type: "boolean",
+        valuePath: "drawGrid",
+        defaultValue: currentOptions.drawGrid ?? true,
+      },
+      {
+        name: "Grid Width",
+        type: "number",
+        valuePath: "gridWidth",
+        defaultValue: currentOptions.gridWidth ?? undefined, // Undefined to use entire visible range
+        min: 1,
+        step: 1,
+      },
+      {
+        name: "Grid Line Style",
+        type: "select",
+        valuePath: "gridLineStyle",
+        defaultValue: currentOptions.gridLineStyle ?? 4, // Assuming 1 corresponds to 'Dashed'
+        options: [
+          { label: "Solid", value: 0 },
+          { label: "Dotted", value: 1 },
+          { label: "Dashed", value: 2 },
+          { label: "Large Dashed", value: 3 },
+          { label: "Sparse Dotted", value: 4 },
+        ],
       }
     );
-  }
-  // (Color options are handled in the color submenu.)
-});
 
-// Back to Trend Trace Menu
-this.addMenuItem(
-  "⤝ Trend Trace Menu",
-  () => this.populateTrendTraceMenu(event, trendTrace),
-  false
-);
-this.showMenu(event);
-}}
+    // Push color options.
+    generalOptions.push(
+      {
+        name: "Up Color",
+        type: "color",
+        valuePath: "upColor",
+        defaultValue:
+          currentOptions.upColor ?? defaultVolumeProfileOptions.upColor,
+      },
+      {
+        name: "Down Color",
+        type: "color",
+        valuePath: "downColor",
+        defaultValue:
+          currentOptions.downColor ?? defaultVolumeProfileOptions.downColor,
+      },
+      {
+        name: "Border Up Color",
+        type: "color",
+        valuePath: "borderUpColor",
+        defaultValue:
+          currentOptions.borderUpColor ??
+          defaultVolumeProfileOptions.borderUpColor,
+      },
+      {
+        name: "Border Down Color",
+        type: "color",
+        valuePath: "borderDownColor",
+        defaultValue:
+          currentOptions.borderDownColor ??
+          defaultVolumeProfileOptions.borderDownColor,
+      },
+      {
+        name: "Grid Color",
+        type: "color",
+        valuePath: "gridColor",
+        defaultValue:
+          currentOptions.gridColor ?? defaultVolumeProfileOptions.gridColor,
+      }
+    );
+
+    // Iterate over each general option and add an input based on its type.
+    generalOptions.forEach((option) => {
+      if (option.type === "number") {
+        this.addNumberInput(
+          camelToTitle(option.name),
+          option.defaultValue,
+          (newValue: number) => {
+            const updatedOptions = buildOptions(option.valuePath, newValue);
+            volumeProfile.applyOptions(updatedOptions);
+            console.log(`Updated ${option.name} to: ${newValue}`);
+          },
+          option.min,
+          option.max,
+          option.step
+        );
+      } else if (option.type === "boolean") {
+        this.addCheckbox(
+          camelToTitle(option.name),
+          option.defaultValue,
+
+          option.defaultValue,
+          (newValue: boolean) => {
+            const updatedOptions = buildOptions(option.valuePath, newValue);
+            volumeProfile.applyOptions(updatedOptions);
+            console.log(`Updated ${option.name} to: ${newValue}`);
+          }
+        );
+      } else if (option.type === "select") {
+        // If options are objects, extract their labels; otherwise, assume an array of strings.
+        const optionLabels =
+          Array.isArray(option.options) && typeof option.options[0] === "object"
+            ? (option.options as Array<{ label: string; value: any }>).map(
+                (opt) => opt.label
+              )
+            : (option.options as string[]);
+
+        this.addSelectInput(
+          camelToTitle(option.name),
+          option.defaultValue,
+          optionLabels,
+          (newLabel: string) => {
+            const selectedOption = (
+              option.options as unknown as Array<{ label: string; value: any }>
+            ).find((opt) => opt.label === newLabel);
+            if (selectedOption) {
+              const updatedOptions = buildOptions(
+                option.valuePath,
+                selectedOption.value
+              );
+              volumeProfile.applyOptions(updatedOptions);
+              console.log(`Updated ${option.name} to: ${selectedOption.value}`);
+            }
+          }
+        );
+      } else if (option.type === "color") {
+        // Use the existing color picker method.
+        this.addColorPickerMenuItem(
+          camelToTitle(option.name),
+          option.defaultValue,
+          option.valuePath,
+          volumeProfile
+        );
+      }
+    });
+
+    this.addMenuItem(
+      "⤝ Main Menu",
+      () => {
+        this.populateChartMenu(event);
+      },
+      false
+    );
+
+    this.showMenu(event);
+  }
+}

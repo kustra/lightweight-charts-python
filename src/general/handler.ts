@@ -24,7 +24,7 @@ import { TooltipPrimitive } from "../tooltip/tooltip";
 
 import { ContextMenu } from "../context-menu/context-menu";
 
-import { ensureExtendedSeries } from "../helpers/typeguards";
+import { ensureExtendedSeries } from "../helpers/series";
 // Define shared extended options
 
 import {
@@ -34,7 +34,7 @@ import {
     ISeriesApiExtended,
     LineSeriesOptions,
     decorateSeries
-} from "../helpers/general";
+} from "../helpers/series";
 import { ohlcSeriesOptions, ohlcdefaultOptions, ohlcSeries } from "../ohlc-series/ohlc-series";
 import { TradeSeriesOptions, tradeDefaultOptions, TradeSeries } from "../tx-series/renderer";
 

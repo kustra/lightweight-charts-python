@@ -8,8 +8,6 @@ import { HorizontalLine } from "../horizontal-line/horizontal-line";
 import { RayLine } from "../horizontal-line/ray-line";
 import { VerticalLine } from "../vertical-line/vertical-line";
 // Right alongside your existing imports for other drawing classes:
-import { TrendTrace } from "../trend-trace/trend-trace-line"; // Adjust path if needed
-import { Trend } from "../trend/trend";
 import { Handler } from "./handler";
 // Fix inconsistent imports of DrawingOptions
 
@@ -27,7 +25,6 @@ export class ToolBox {
     private static readonly RAY_SVG: string = '<rect x="8" y="14" width="17" height="1"/><path d="M3.67,14.5l2.83,2.83l2.83-2.83L6.5,11.67L3.67,14.5z M7.91,14.5L6.5,15.91L5.09,14.5l1.41-1.41L7.91,14.5z"/>';
     private static readonly BOX_SVG: string = '<rect x="8" y="6" width="12" height="1"/><rect x="9" y="22" width="11" height="1"/><path d="M3.67,6.5L6.5,9.33L9.33,6.5L6.5,3.67L3.67,6.5z M7.91,6.5L6.5,7.91L5.09,6.5L6.5,5.09L7.91,6.5z"/><path d="M19.67,6.5l2.83,2.83l2.83-2.83L22.5,3.67L19.67,6.5z M23.91,6.5L22.5,7.91L21.09,6.5l1.41-1.41L23.91,6.5z"/><path d="M19.67,22.5l2.83,2.83l2.83-2.83l-2.83-2.83L19.67,22.5z M23.91,22.5l-1.41,1.41l-1.41-1.41l1.41-1.41L23.91,22.5z"/><path d="M3.67,22.5l2.83,2.83l2.83-2.83L6.5,19.67L3.67,22.5z M7.91,22.5L6.5,23.91L5.09,22.5l1.41-1.41L7.91,22.5z"/><rect x="22" y="9" width="1" height="11"/><rect x="6" y="9" width="1" height="11"/>';
     private static readonly VERT_SVG: string = ToolBox.RAY_SVG;
-    private static readonly TRENDTRACE_SVG: string = `<rect x="3" y="13" width="23" height="1" /><rect x="3" y="16" width="23" height="1" /><path d="M5 5 L10 10 L15 5 ..." />`;
     div: HTMLDivElement;
     private activeIcon: Icon | null = null;
 
@@ -69,8 +66,7 @@ export class ToolBox {
         this.buttons.push(this._makeToolBoxElement(RayLine, 'KeyR', ToolBox.RAY_SVG));
         this.buttons.push(this._makeToolBoxElement(Box, 'KeyB', ToolBox.BOX_SVG));
         this.buttons.push(this._makeToolBoxElement(VerticalLine, 'KeyV', ToolBox.VERT_SVG, true));
-        this.buttons.push(this._makeToolBoxElement(TrendTrace, 'KeyS', ToolBox.TRENDTRACE_SVG)); // Add TrendSeries here
-        this.buttons.push(this._makeToolBoxElement(Trend, 'KeyX', ToolBox.TREND_SVG))
+
 
        // this.buttons.push(this._makeToolBoxElement(TrendSeries,'KeyS',ToolBox.TRENDSERIES_SVG));
 
@@ -182,9 +178,7 @@ export class ToolBox {
                 case "VerticalLine":
                     this._drawingTool.addNewDrawing(new VerticalLine(d.points[0], d.options));
                     break;
-                case "Trend": 
-                    this._drawingTool.addNewDrawing(new Trend(d.points[0], d.points[1],undefined, d.options));
-                    break;
+
 
             }
         })
