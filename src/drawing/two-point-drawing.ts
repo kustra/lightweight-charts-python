@@ -2,6 +2,7 @@ import { Point } from './data-source';
 import { DrawingOptions, defaultOptions } from './options';
 import { Drawing } from './drawing';
 import { TwoPointDrawingPaneView } from './pane-view';
+import { PluginBase } from '../plugin-base';
 
 
 export abstract class TwoPointDrawing extends Drawing {
@@ -9,6 +10,7 @@ export abstract class TwoPointDrawing extends Drawing {
 
     protected _hovered: boolean = false;
 
+    public linkedObjects: PluginBase[] = []
     constructor(
         p1: Point,
         p2: Point,
@@ -29,6 +31,17 @@ export abstract class TwoPointDrawing extends Drawing {
 
     setSecondPoint(point: Point) {
         this.updatePoints(null, point);
+    }
+    public detach(): void {
+        this.linkedObjects.forEach((primitive:PluginBase) => {
+            const series = primitive.series
+            if (series){
+            series.detachPrimitive(primitive) 
+            }
+        });
+        this.linkedObjects = [];  // Clear linked objects after detaching
+        super.detach()
+
     }
 
     get p1() { return this.points[0]; }

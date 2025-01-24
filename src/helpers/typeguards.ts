@@ -1,9 +1,7 @@
 import { SeriesType, ISeriesApi, AreaData, Background, BarData, CandlestickData, ColorType, HistogramData, LineData, OhlcData, SolidColor, Time, VerticalGradientColor, BaselineData, CustomData, ISeriesPrimitive, WhitespaceData } from "lightweight-charts";
-import { ISeriesApiExtended, decorateSeries } from "./general";
-import { Legend } from "../general/legend";
 import { LegendSeries, LegendPrimitive, LegendGroup, LegendItem } from "../general";
 import { FillArea } from "../fill-area/fill-area";
-import { CandleShape } from "../ohlc-series/data";
+import { CandleShape, ohlcSeriesData } from "../ohlc-series/data";
 export function isSolidColor(background: Background): background is SolidColor {
   return background.type === ColorType.Solid;
 }
@@ -23,7 +21,7 @@ export function isSingleValueData(
 
 export function isOHLCData(
   data: any
-): data is BarData<Time> | CandlestickData<Time> | OhlcData<Time> {
+): data is BarData<Time> | CandlestickData<Time> | OhlcData<Time> | ohlcSeriesData{
   return "close" in data && "open" in data && "high" in data && "low" in data;
 }
 
@@ -57,26 +55,7 @@ export function hasColorOption(series: ISeriesApi<SeriesType>): boolean {
     const seriesOptions = series.options() as any;
     return 'lineColor' in seriesOptions || 'color' in seriesOptions;
 }
-export function ensureExtendedSeries(
-    series: ISeriesApi<SeriesType> | ISeriesApiExtended,
-    legend: Legend // Assuming `Legend` is the type of the legend instance
-  ): ISeriesApiExtended {
-    // Type guard to check if the series is already extended
-    const isExtendedSeries = (
-      series: ISeriesApi<SeriesType> | ISeriesApiExtended
-    ): series is ISeriesApiExtended => {
-      return (series as ISeriesApiExtended).primitives !== undefined;
-    };
-  
-    // If the series is already extended, return it
-    if (isExtendedSeries(series)) {
-      return series;
-    }
-  
-    // Otherwise, decorate the series dynamically
-    console.log("Decorating the series dynamically.");
-    return decorateSeries(series, legend);
-  }
+
 
   export function isLegendPrimitive(item: LegendSeries | LegendPrimitive): item is LegendPrimitive {
     return (item as LegendPrimitive).primitive !== undefined;
@@ -108,10 +87,8 @@ export interface SeriesTypeToDataMap {
  */
 export function isFillArea(primitive: ISeriesPrimitive | FillArea): primitive is FillArea {
   return (
-    (primitive as FillArea).options !== undefined && 
     (primitive as FillArea).options.originColor !== null &&
-    (primitive as FillArea).options.destinationColor !== null &&
-    (primitive as FillArea).options.lineWidth !== null
+    (primitive as FillArea).options.destinationColor !== null 
   );
 }
 

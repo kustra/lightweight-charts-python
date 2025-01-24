@@ -1,10 +1,257 @@
-import { ISeriesApi,  WhitespaceData, SeriesType, DeepPartial, SeriesOptionsCommon, LineSeriesOptions, HistogramSeriesOptions, AreaSeriesOptions, BarSeriesOptions, LineStyle, LineWidth, Time, AreaData, BarData, CandlestickData, HistogramData, LineData } from "lightweight-charts";
+import { ISeriesApi,  WhitespaceData, SeriesType, DeepPartial, SeriesOptionsCommon, LineStyle, LineWidth, Time, AreaData, BarData, CandlestickData, HistogramData, LineData, MouseEventParams, AreaStyleOptions, BarStyleOptions, HistogramStyleOptions, ISeriesPrimitive, LineStyleOptions } from "lightweight-charts";
 import { CandleShape } from "../ohlc-series/data";
-import { ISeriesApiExtended, OhlcSeriesOptions } from "./general";
 import { isOHLCData, isSingleValueData, isWhitespaceData } from "./typeguards";
 import { TradeData, tradeDefaultOptions, TradeSeries, TradeSeriesOptions } from "../tx-series/renderer";
-import { ohlcSeries } from "../ohlc-series/ohlc-series";
-import { Handler } from "../general";
+import { ohlcSeries, ohlcSeriesOptions } from "../ohlc-series/ohlc-series";
+import { Handler, Legend } from "../general";
+
+
+export interface ISeriesApiExtended extends ISeriesApi<SeriesType> {
+  primitives: {
+      [key: string]: any; // Dictionary for attached primitives
+      [index: number]: any; // Indexed access for primitives
+      length: number; // Array-like length
+    };
+    primitive: any; // Reference to the most recently attached primitive
+    addPeer(peer: ISeriesApi<any>): void; // Add a peer series
+    removePeer(peer: ISeriesApi<any>): void; // Remove a peer series
+    peers: ISeriesApi<any>[]; // List of peer series
+    sync(series: ISeriesApi<any>): void;
+    attachPrimitive(primitive:ISeriesPrimitive, name?: string, replace?:boolean, addToLegend?:boolean): void; // Method to attach a primitive
+    detachPrimitive(primitive:ISeriesPrimitive): void; // Detach a primitive by type
+    detachPrimitives():void;
+  decorated: boolean; // Flag indicating if the series has been decorated
+  }
+  export function decorateSeries<T extends ISeriesApi<SeriesType>>(
+    original: T,
+    legend?: Legend // Optional Legend instance to handle primitives
+  ): T & ISeriesApiExtended {
+  // Check if the series is already decorated
+  if ((original as any)._isDecorated) {
+    console.warn("Series is already decorated. Skipping decoration.");
+      return original as T & ISeriesApiExtended;
+  }
+
+  // Mark the series as decorated
+  (original as any)._isDecorated = true;
+    const decorated: boolean = true;
+    const peers: ISeriesApi<any>[] = [];
+    const originalSetData = (original as ISeriesApi<any>).setData.bind(original);
+
+    // Array to store attached primitives
+    const primitives: ISeriesPrimitive[] = [];
+  
+    // Reference to the most recently attached primitive
+  let lastAttachedPrimitive: ISeriesPrimitive | null = null;
+
+    // Hook into the original `detachPrimitive` if it exists
+  const originalDetachPrimitive = (original as any).detachPrimitive?.bind(original);
+  const originalAttachPrimitive = (original as any).attachPrimitive?.bind(original);
+  const originalData = (original as any).data?.bind(original);
+
+  /**
+   * Helper function to convert data items.
+   * 
+   * @param sourceItem - The raw source item (must contain a `time` property).
+   * @param keys - Optional list of property names to copy. Defaults to ['time'].
+   * @param copy - If true, copies all properties from sourceItem, overriding `keys`.
+   * @returns A partial data item or null if `time` is missing.
+   */
+
+  function sync(series: ISeriesApi<SeriesType>): void {
+    // 1) Determine the type from the series’ own options
+    //    (Ensure "seriesType" is indeed on the options, otherwise provide fallback)
+    const options = series.options() as { seriesType?: SupportedSeriesType };
+    const targetType = options.seriesType ?? "Line"; // fallback to "Line" if undefined
+  
+    // 2) Perform initial synchronization from "originalData"
+    const sourceData = originalData();
+    if (!sourceData) {
+      console.warn("Source data is missing for synchronization.");
+      return;
+    }
+  
+    const targetData = [...series.data()];
+    for (let i = targetData.length; i < sourceData.length; i++) {
+      // Now call your convertDataItem with the discovered type:
+      const newItem = convertDataItem(series, targetType, i);
+      if (newItem) {
+        if (newItem && 'time' in newItem && 'value' in newItem) {
+            targetData.push(newItem);
+        } else {
+            console.warn('Invalid data item:', newItem);
+        }
+      }
+    }
+    series.setData(targetData);
+    console.log(`Synchronized series of type ${series.seriesType}`);
+  
+    // 3) Subscribe for future changes
+    series.subscribeDataChanged(() => {
+      const updatedSourceData = [...originalData()];
+      if (!updatedSourceData || updatedSourceData.length === 0) {
+        console.warn("Source data is missing for synchronization.");
+        return;
+      }
+  
+      // Get the last bar from the target series
+      const lastTargetBar = series.data().slice(-1)[0];
+      // The last index from updatedSourceData
+      const lastSourceIndex = updatedSourceData.length - 1;
+  
+      // If the new item has a time >= last target bar’s time, we update/append
+      if (
+        !lastTargetBar ||
+        updatedSourceData[lastSourceIndex].time >= lastTargetBar.time
+      ) {
+        const newItem = convertDataItem(series, targetType, lastSourceIndex);
+        if (newItem) {
+          series.update(newItem);
+          console.log(`Updated/added bar via "update()" for series type ${series.seriesType}`);
+        }
+      }
+    });
+  }
+  
+
+  function attachPrimitive(
+    primitive: ISeriesPrimitive,
+    name?: string,
+    replace: boolean = true,
+    addToLegend: boolean = false
+  ): void {
+    const primitiveType = (primitive.constructor as any).type || primitive.constructor.name;
+
+      // Detach existing primitives if `replace` is true
+      if (replace) {
+        detachPrimitives();
+      } else {
+        // Check if a primitive of the same type is already attached
+        const existingIndex = primitives.findIndex(
+          (p) => (p.constructor as any).type === primitiveType
+        );
+        if (existingIndex !== -1) {
+          detachPrimitive(primitives[existingIndex]);
+        }
+      }
+  
+      // Attach the primitive to the series
+    if (originalAttachPrimitive) {
+      originalAttachPrimitive(primitive);
+    }
+
+      // Add the new primitive to the list
+      primitives.push(primitive);
+    lastAttachedPrimitive = primitive;
+
+    console.log(`Primitive of type "${primitiveType}" attached.`);
+
+    // Add the primitive to the legend if required
+    if (legend && addToLegend) {
+      legend.addLegendPrimitive(original as ISeriesApi<any>, primitive, name);
+    }
+  }
+  
+  function detachPrimitive(primitive: ISeriesPrimitive): void {
+      const index = primitives.indexOf(primitive);
+      if (index === -1) {
+        return;
+      }
+  
+      // Remove the primitive from the array
+      primitives.splice(index, 1);
+  
+    if (lastAttachedPrimitive === primitive) {
+      lastAttachedPrimitive = null;
+    }
+  
+      // Detach the primitive using the original method
+      if (originalDetachPrimitive) {
+        originalDetachPrimitive(primitive);
+      }
+
+    // Remove the primitive from the legend if it exists
+    if (legend) {
+        const legendEntry = legend.findLegendPrimitive(original as ISeriesApi<any>, primitive);
+        if (legendEntry) {
+      legend.removeLegendPrimitive(primitive);
+          console.log(`Removed primitive of type "${primitive.constructor.name}" from legend.`);
+        }
+      }
+    }
+
+  function detachPrimitives(): void {
+    console.log("Detaching all primitives.");
+      while (primitives.length > 0) {
+        const primitive = primitives.pop()!;
+        detachPrimitive(primitive);
+      }
+    console.log("All primitives detached.");
+  }
+
+    function setData(data: any[]) {
+      originalSetData(data);
+      peers.forEach((peer) => peer.setData?.(data));
+      console.log("Data updated on series and peers.");
+          }
+  
+    function addPeer(peer: ISeriesApi<any>) {
+      peers.push(peer);
+    }
+  
+    function removePeer(peer: ISeriesApi<any>) {
+      const index = peers.indexOf(peer);
+      if (index !== -1) peers.splice(index, 1);
+    }
+  
+    return Object.assign(original, {
+    setData,
+      addPeer,
+      removePeer,
+      peers,
+      primitives,
+      sync,
+      attachPrimitive,
+      detachPrimitive,
+      detachPrimitives,
+      decorated,
+    get primitive() {
+      return lastAttachedPrimitive;
+    },
+    });
+  }
+  
+export interface SeriesOptionsExtended {
+    primitives?: {
+      [key: string]: any; // Dictionary for attached primitives
+    };
+    seriesType?: string;
+    group?: string; // Group name for the series
+    legendSymbol?: string | string[]; // Legend symbol(s) for the series
+    isIndicator?: boolean; // Indicator flag
+  }
+  // Define specific options interfaces with optional `group`, `legendSymbol`, and `primitives` properties
+  export interface LineSeriesOptions
+    extends DeepPartial<LineStyleOptions & SeriesOptionsCommon>,
+      SeriesOptionsExtended {}
+  
+  export interface HistogramSeriesOptions
+    extends DeepPartial<HistogramStyleOptions & SeriesOptionsCommon>,
+      SeriesOptionsExtended {}
+  
+  export interface AreaSeriesOptions
+    extends DeepPartial<AreaStyleOptions & SeriesOptionsCommon>,
+      SeriesOptionsExtended {}
+  
+  export interface BarSeriesOptions
+    extends DeepPartial<BarStyleOptions & SeriesOptionsCommon>,
+      SeriesOptionsExtended {}
+  
+  export interface OhlcSeriesOptions
+    extends ohlcSeriesOptions,
+        DeepPartial<SeriesOptionsExtended> {}
+    
+
 export function determineAvailableFields(series: ISeriesApi<any>|TradeSeries<any>|ohlcSeries<any>): {
 ohlc: boolean;
 volume: boolean;
@@ -393,4 +640,127 @@ export enum SeriesTypeEnum {
   Ohlc = "Ohlc",
   Trade = "Trade"
 
+}
+
+
+
+/**
+ * Attempts to locate a series near the current cursor (within a percentage threshold).
+ * This version extracts `MouseEventParams` from `handler.ContextMenu.getMouseEventParams()`.
+ *
+ * @param handler - The chart/series handler that provides reference for coordinate->price conversion.
+ * @param thresholdPct - The maximum percentage difference allowed to consider a series "close".
+ * @returns The nearest ISeriesApi<SeriesType> if found, or null otherwise.
+ */
+export function getProximitySeries(
+  handler: Handler,
+  thresholdPct = 3.33
+): ISeriesApi<SeriesType> | null {
+  // 1) Obtain MouseEventParams
+  const mouseEventParams: MouseEventParams | null = handler.ContextMenu.getMouseEventParams();
+
+  // 2) Basic checks
+  if (!mouseEventParams) {
+      console.warn("No MouseEventParams available. Param is null/undefined.");
+      return null;
+  }
+
+  if (!mouseEventParams.seriesData) {
+      console.warn("No seriesData in MouseEventParams. Possibly not hovering over any series data.");
+      return null;
+  }
+
+  if (!mouseEventParams.point) {
+      console.warn("No 'point' (x,y) in MouseEventParams, cannot compute proximity.");
+      return null;
+  }
+
+  // 3) Convert the cursor Y-coordinate to a price using some "source" series
+  const sourceSeries = handler.series ?? handler._seriesList?.[0];
+  if (!sourceSeries) {
+      console.warn("No series reference available in handler.");
+      return null;
+  }
+
+  const cursorY = mouseEventParams.point.y;
+  const cursorPrice = sourceSeries.coordinateToPrice(cursorY);
+  if (cursorPrice === null) {
+      console.warn("cursorPrice is null. Unable to determine proximity.");
+      return null;
+  }
+
+  // 4) Gather potential series within threshold
+  const seriesByDistance: { distance: number; series: ISeriesApi<SeriesType> }[] = [];
+
+  mouseEventParams.seriesData.forEach((data, series) => {
+      let refPrice: number | undefined;
+
+      // Single-value data: { value: number }
+      if (isSingleValueData(data)) {
+          refPrice = data.value;
+      }
+      // OHLC data: { open, high, low, close }
+      else if (isOHLCData(data)) {
+          refPrice = data.close;
+      }
+
+      if (refPrice !== undefined && !isNaN(refPrice)) {
+          const distance = Math.abs(refPrice - cursorPrice);
+          const percentageDifference = (distance / cursorPrice) * 100;
+
+          if (percentageDifference <= thresholdPct) {
+              seriesByDistance.push({ distance, series });
+          }
+      }
+  });
+
+  // 5) Sort by ascending distance
+  seriesByDistance.sort((a, b) => a.distance - b.distance);
+
+  // 6) Return the closest series if any
+  if (seriesByDistance.length > 0) {
+      console.log("Closest series found:", seriesByDistance[0].series);
+      return seriesByDistance[0].series;
+  }
+
+  console.log("No series found within proximity threshold.");
+  return null;
+}
+
+
+
+// A helper that, given a “default” object, picks only those keys 
+// from an incoming options object that are present in the default.
+export function pickCommonOptions<T extends object>(
+  defaults: T,
+  opts: Partial<any>
+): Partial<T> {
+  const result: Partial<T> = {};
+  for (const key in defaults) {
+    if (Object.prototype.hasOwnProperty.call(opts, key)) {
+      result[key as keyof T] = opts[key];
+    }
+  }
+  return result;
+}
+
+export function ensureExtendedSeries(
+  series: ISeriesApi<SeriesType> | ISeriesApiExtended,
+  legend: Legend // Assuming `Legend` is the type of the legend instance
+): ISeriesApiExtended {
+  // Type guard to check if the series is already extended
+  const isExtendedSeries = (
+    series: ISeriesApi<SeriesType> | ISeriesApiExtended
+  ): series is ISeriesApiExtended => {
+    return (series as ISeriesApiExtended).primitives !== undefined;
+  };
+
+  // If the series is already extended, return it
+  if (isExtendedSeries(series)) {
+    return series;
+  }
+
+  // Otherwise, decorate the series dynamically
+  console.log("Decorating the series dynamically.");
+  return decorateSeries(series, legend);
 }

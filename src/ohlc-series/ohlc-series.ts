@@ -32,16 +32,16 @@ export interface ohlcSeriesOptions
 	//lowerDownColor: string|undefined
 export const ohlcdefaultOptions: ohlcSeriesOptions = {
 	...customSeriesDefaultOptions,
-	upColor: '#26a69a',
-	downColor: '#ef5350',
+	upColor: '#008000',
+	downColor: '#8C0000',
 	wickVisible: true,
 	borderVisible: true,
-	borderColor: '#378658',
-	borderUpColor: '#26a69a',
-	borderDownColor: '#ef5350',
+	borderColor: '#737375',
+	borderUpColor: '#008000',
+	borderDownColor: '#8C0000',
 	wickColor: '#737375',
-	wickUpColor: '#26a69a',
-	wickDownColor: '#ef5350',
+	wickUpColor: '#008000',
+	wickDownColor: '#8C0000',
 	radius: .6,
 	shape: 'Rounded' as CandleShape,  // Default shape
 	chandelierSize: 1,

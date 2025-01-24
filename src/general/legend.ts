@@ -202,52 +202,64 @@ export class Legend {
     
         return primitiveRow;
     }
-    
-    
     private togglePrimitive(primitive: ISeriesPrimitive, visible: boolean): void {
-        const options = (primitive as any).options;
+        // Check for options in either "options" or "_options"
+        const options = (primitive as any).options || (primitive as any)._options;
         if (!options) {
-            console.warn("Primitive has no options to update.");
-            return;
+          console.warn("Primitive has no options to update.");
+          return;
         }
-    
+      
+        const updatedOptions: Record<string, any> = {};
+      
+        // Check if the primitive explicitly exposes a "visible" option.
+        if ("visible" in options) {
+          updatedOptions["visible"] = visible;
+          console.log(`Toggling visible option for primitive: ${primitive.constructor.name} to ${visible}`);
+          (primitive as any).applyOptions(updatedOptions);
+          // Return early since we have applied the simple visible toggle.
+          return;
+        }
+      
+        // Fallback: using color transparency for toggling visibility.
         const transparentColor = "rgba(0,0,0,0)";
         const originalColorsKey = "_originalColors";
-    
-        // Initialize storage for original colors if it doesn't exist
+      
+        // Initialize storage for original colors if it doesn't exist,
+        // checking again on both possible properties.
         if (!(primitive as any)[originalColorsKey]) {
-            (primitive as any)[originalColorsKey] = {};
+          (primitive as any)[originalColorsKey] = {};
         }
-    
         const originalColors = (primitive as any)[originalColorsKey];
-        const updatedOptions: Record<string, any> = {};
-    
+      
         for (const key of Object.keys(options)) {
-            if (key.toLowerCase().includes("color")) {
-                if (!visible) {
-                    // Store the original color if we're toggling visibility off
-                    if (!originalColors[key]) {
-                        originalColors[key] = options[key];
-                    }
-                    updatedOptions[key] = transparentColor;
-                } else {
-                    // Restore the original color if we're toggling visibility on
-                    updatedOptions[key] = originalColors[key] || options[key];
-                }
+          if (key.toLowerCase().includes("color")) {
+            if (!visible) {
+              // Store the original color if we're toggling visibility off.
+              if (!originalColors[key]) {
+                originalColors[key] = options[key];
+              }
+              updatedOptions[key] = transparentColor;
+            } else {
+              // Restore the original color if we're toggling visibility on.
+              updatedOptions[key] = originalColors[key] || options[key];
             }
+          }
         }
-    
-        // Apply the updated options
+      
+        // Apply the updated options if any changes exist.
         if (Object.keys(updatedOptions).length > 0) {
-            console.log(`Updating visibility for primitive: ${primitive.constructor.name}`);
-            (primitive as any).applyOptions(updatedOptions);
-    
-            // Clear the original colors when visibility is restored
-            if (visible) {
-                delete (primitive as any)[originalColorsKey];
-            }
+          console.log(`Updating visibility for primitive: ${primitive.constructor.name}`);
+          (primitive as any).applyOptions(updatedOptions);
+      
+          // Clear the original colors when visibility is restored.
+          if (visible) {
+            delete (primitive as any)[originalColorsKey];
+          }
         }
-    }
+      }
+      
+      
     
     
     public findLegendPrimitive(series: ISeriesApi<SeriesType>, primitive: ISeriesPrimitive): HTMLDivElement | null {

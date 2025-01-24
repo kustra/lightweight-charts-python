@@ -24,7 +24,7 @@ import { TooltipPrimitive } from "../tooltip/tooltip";
 
 import { ContextMenu } from "../context-menu/context-menu";
 
-import { ensureExtendedSeries } from "../helpers/typeguards";
+import { ensureExtendedSeries } from "../helpers/series";
 // Define shared extended options
 
 import {
@@ -34,9 +34,9 @@ import {
     ISeriesApiExtended,
     LineSeriesOptions,
     decorateSeries
-} from "../helpers/general";
+} from "../helpers/series";
 import { ohlcSeriesOptions, ohlcdefaultOptions, ohlcSeries } from "../ohlc-series/ohlc-series";
-//import { TradeSeriesOptions, tradeDefaultOptions, TradeSeries } from "../tx-series/renderer";
+import { TradeSeriesOptions, tradeDefaultOptions, TradeSeries } from "../tx-series/renderer";
 
 
 
@@ -410,6 +410,7 @@ export class Handler {
         const ohlcCustomSeries = this.chart.addCustomSeries(Instance, {
             ...filteredOptions,
             chandelierSize,
+            title: name
         });
 
         const decorated = decorateSeries(ohlcCustomSeries, this.legend);
@@ -441,63 +442,63 @@ export class Handler {
         return { name, series: ohlcCustomSeries };
     }
 
-    //createTradeSeries(
-    //    name: string,
-    //    options: Partial<TradeSeriesOptions> = {}
-    //): { name: string; series: ISeriesApi<SeriesType> } {
-    //    const seriesType = 'Trade'; // A custom identifier for this series type
-//
-    //    // Merge provided options with default options
-    //    const mergedOptions: TradeSeriesOptions & {
-    //        seriesType?: string;
-    //        group?: string;
-    //        legendSymbol?: string[] | string;
-    //    } = {
-    //        ...tradeDefaultOptions,
-    //        ...options,
-    //        seriesType
-    //    };
-//
-    //    const {
-    //        group,
-    //        legendSymbol = ['$'],
-    //        seriesType: _,
-    //        ...filteredOptions
-    //    } = mergedOptions;
-//
-    //    // Create a new TradeSeries instance
-    //    const instance = new TradeSeries();
-    //    // Add the custom series to the chart
-    //    const tradeCustomSeries = this.chart.addCustomSeries(instance, filteredOptions);
-//
-    //    // Decorate the series (assuming `decorateSeries` and `this.legend` are defined)
-    //    const decorated = decorateSeries(tradeCustomSeries, this.legend);
-    //    this._seriesList.push(decorated);
-    //    this.seriesMap.set(name ?? 'Trade', decorated);
-//
-    //    // For the legend colors, now we only have backgroundColorStop and backgroundColorTarget.
-    //    // We can provide these two as representative colors. If you want a third color, you may pick one of them again or define another logic.
-    //    const colorsArray = [
-    //        mergedOptions.backgroundColorStop,
-    //        mergedOptions.backgroundColorTarget
-    //    ];
-//
-    //    const finalLegendSymbol = Array.isArray(legendSymbol) ? legendSymbol : [legendSymbol];
-//
-    //    const legendItem: LegendItem = {
-    //        name: name,
-    //        series: decorated,
-    //        colors: colorsArray,
-    //        legendSymbol: finalLegendSymbol,
-    //        seriesType,
-    //        group,
-    //    };
-//
-    //    // Add legend item
-    //    this.legend.addLegendItem(legendItem);
-//
-    //    return { name, series: tradeCustomSeries };
-    //}
+    createTradeSeries(
+        name: string,
+        options: Partial<TradeSeriesOptions> = {}
+    ): { name: string; series: ISeriesApi<SeriesType> } {
+        const seriesType = 'Trade'; // A custom identifier for this series type
+
+        // Merge provided options with default options
+        const mergedOptions: TradeSeriesOptions & {
+            seriesType?: string;
+            group?: string;
+            legendSymbol?: string[] | string;
+        } = {
+            ...tradeDefaultOptions,
+            ...options,
+            seriesType
+        };
+
+        const {
+            group,
+            legendSymbol = ['$'],
+            seriesType: _,
+            ...filteredOptions
+        } = mergedOptions;
+
+        // Create a new TradeSeries instance
+        const instance = new TradeSeries();
+        // Add the custom series to the chart
+        const tradeCustomSeries = this.chart.addCustomSeries(instance, filteredOptions);
+
+        // Decorate the series (assuming `decorateSeries` and `this.legend` are defined)
+        const decorated = decorateSeries(tradeCustomSeries, this.legend);
+        this._seriesList.push(decorated);
+        this.seriesMap.set(name ?? 'Trade', decorated);
+
+        // For the legend colors, now we only have backgroundColorStop and backgroundColorTarget.
+        // We can provide these two as representative colors. If you want a third color, you may pick one of them again or define another logic.
+        const colorsArray = [
+            mergedOptions.backgroundColorStop,
+            mergedOptions.backgroundColorTarget
+        ];
+
+        const finalLegendSymbol = Array.isArray(legendSymbol) ? legendSymbol : [legendSymbol];
+
+        const legendItem: LegendItem = {
+            name: name,
+            series: decorated,
+            colors: colorsArray,
+            legendSymbol: finalLegendSymbol,
+            seriesType,
+            group,
+        };
+
+        // Add legend item
+        this.legend.addLegendItem(legendItem);
+
+        return { name, series: tradeCustomSeries };
+    }
 //
 
     createFillArea(

@@ -22,9 +22,10 @@ import {
 
 import { ohlcSeriesData, BarItem, AggregatorOptions, CandleShape, parseCandleShape } from './data';
 
-import { setOpacity, darkenColor } from './helpers';
+import { setOpacity } from '../helpers/colors';
 import { setLineStyle } from '../helpers/canvas-rendering';
 import { gridAndCrosshairMediaWidth } from '../helpers/dimensions/crosshair-width';
+import { ohlcRectangle, ohlcRounded, ohlcEllipse, ohlcArrow, ohlc3d, ohlcPolygon } from './shapes';
 
 // -------------------------------------
 // Constants
@@ -557,11 +558,17 @@ export class ohlcSeriesRenderer<
 			// Draw the candle based on its specified shape.
 			switch (bar.shape) {
 				case 'Rectangle':
-					this._drawCandle(ctx, leftSide, rightSide, barY, barVerticalSpan);
+        ohlcRectangle(
+          ctx,
+          leftSide,
+          rightSide,
+          barY,
+          barVerticalSpan
+        );
 					break;
 
 				case 'Rounded':
-					this._drawRounded(
+        ohlcRounded(
 						ctx,
 						leftSide,
 						rightSide,
@@ -572,18 +579,18 @@ export class ohlcSeriesRenderer<
 					break;
 
 				case 'Ellipse':
-					this._drawEllipse(
+        ohlcEllipse(
 						ctx,
 						leftSide,
 						rightSide,
 						middle,
 						barY,
-						barVerticalSpan,
+          barVerticalSpan
 					);
 					break;
 
 				case 'Arrow':
-					this._drawArrow(
+        ohlcArrow(
 						ctx,
 						leftSide,
 						rightSide,
@@ -597,11 +604,24 @@ export class ohlcSeriesRenderer<
 					break;
 
 				case '3d':
-					this._draw3d(ctx, barHorizontalPos, bar.high * verticalPixelRatio, bar.low * verticalPixelRatio, bar.open * verticalPixelRatio, bar.close * verticalPixelRatio, candleBodyWidth, barHorizontalSpan, bar.color, bar.borderColor, bar.isUp, barSpace);
+        ohlc3d(
+						ctx,
+						barHorizontalPos,
+						bar.high * verticalPixelRatio,
+						bar.low * verticalPixelRatio,
+						bar.open * verticalPixelRatio,
+						bar.close * verticalPixelRatio,
+						candleBodyWidth,
+						barHorizontalSpan,
+						bar.color ?? this._options?.color ?? 'rgba(255,255,255,1)',
+						bar.borderColor ?? this._options?.borderColor ?? 'rgba(255,255,255,1)',
+						bar.isUp,
+						barSpace
+						);
 					break;
 
 				case 'Polygon':
-					this._drawPolygon(
+        ohlcPolygon(
 						ctx,
 						leftSide,
 						rightSide,
@@ -615,7 +635,7 @@ export class ohlcSeriesRenderer<
 
 				default:
 					// Fallback to rectangle shape if unknown shape is specified.
-					this._drawCandle(ctx, leftSide, rightSide, barY, barVerticalSpan);
+					ohlcRectangle(ctx, leftSide, rightSide, barY, barVerticalSpan);
 					break;
 			}
 		}
@@ -623,388 +643,389 @@ export class ohlcSeriesRenderer<
 		// Restore the canvas state after drawing.
 		ctx.restore();
 	}
-
-	/**
-	 * Draws a rectangle-shaped candle.
-	 * @param ctx - The canvas rendering context.
-	 * @param leftSide - The X-coordinate of the left edge of the candle.
-	 * @param rightSide - The X-coordinate of the right edge of the candle.
-	 * @param yCenter - The Y-coordinate of the center of the candle.
-	 * @param candleHeight - The height of the candle in pixels.
-	 */
-	private _drawCandle(
-		ctx: CanvasRenderingContext2D,
-		leftSide: number,
-		rightSide: number,
-		yCenter: number,
-		candleHeight: number
-	): void {
-		const topEdge = yCenter - candleHeight / 2;
-		const bottomEdge = yCenter + candleHeight / 2;
-
-		// Begin drawing the candle rectangle.
-		ctx.beginPath();
-		ctx.moveTo(leftSide, topEdge);
-		ctx.lineTo(leftSide, bottomEdge);
-		ctx.lineTo(rightSide, bottomEdge);
-		ctx.lineTo(rightSide, topEdge);
-		ctx.closePath();
-
-		// Fill and stroke the rectangle.
-		ctx.fill();
-		ctx.stroke();
-	}
-
-		/**
-	 * Draws a rounded rectangle-shaped candle with clamped corner radius.
-	 * @param ctx - The canvas rendering context.
-	 * @param leftSide - The X-coordinate of the left edge of the candle.
-	 * @param rightSide - The X-coordinate of the right edge of the candle.
-	 * @param yCenter - The Y-coordinate of the center of the candle.
-	 * @param candleHeight - The height of the candle in pixels.
-	 * @param radius - A float from 0..1 that we clamp to an appropriate max.
-	 */
-		private _drawRounded(
-			ctx: CanvasRenderingContext2D,
-			leftSide: number,
-			rightSide: number,
-			yCenter: number,
-			candleHeight: number,
-			radius: number
-		  ) {
-			const width = rightSide - leftSide;
-		  
-			// Optionally clamp radius if it's supposed to be 0..1
-			const rawRadius = radius * Math.min(Math.abs(width), Math.abs(candleHeight));
-			const effectiveRadius = Math.abs(Math.min(rawRadius, width / 2, candleHeight / 2));
-		  
-			const topEdge = yCenter - candleHeight / 2;
-		  
-			ctx.beginPath();
-			if (typeof ctx.roundRect === 'function') {
-			  ctx.roundRect(leftSide, topEdge, width, candleHeight, effectiveRadius);
-			} else {
-			  // Fallback: manually draw arcs or just do rect
-			  ctx.rect(leftSide, topEdge, width, candleHeight);
-			}
-			ctx.fill();
-			ctx.stroke();
-		  }
-		  
-
-	/**
-	 * Draws an ellipse-shaped candle.
-	 * @param ctx - The canvas rendering context.
-	 * @param leftSide - The X-coordinate of the left edge of the ellipse.
-	 * @param rightSide - The X-coordinate of the right edge of the ellipse.
-	 * @param middle - The X-coordinate of the center of the ellipse.
-	 * @param yCenter - The Y-coordinate of the center of the ellipse.
-	 * @param candleHeight - The height of the ellipse in pixels.
-	 * @param barSpacing - The spacing factor between bars.
-	 */
-	private _drawEllipse(
-		ctx: CanvasRenderingContext2D,
-		leftSide: number,
-		rightSide: number,
-		middle: number,
-		yCenter: number,
-		candleHeight: number,
-	): void {
-		// Calculate radii based on candle dimensions and spacing.
-		const xRadius = (rightSide - leftSide) / 2;
-		const yRadius = candleHeight / 2;
-		const adjustedXCenter = middle;
-
-		// Begin drawing the ellipse.
-		ctx.beginPath();
-		ctx.ellipse(
-			adjustedXCenter, // X-coordinate of the center.
-			yCenter, // Y-coordinate of the center.
-			Math.abs(xRadius), // Horizontal radius.
-			Math.abs(yRadius), // Vertical radius.
-			0, // Rotation angle.
-			0, // Start angle.
-			Math.PI * 2 // End angle.
-		);
-		ctx.fill();
-		ctx.stroke();
-	}
-
-
-	/**
-	 * Draws a 3D-shaped candle, providing a depth effect.
-	 * @param ctx - The canvas rendering context.
-	 * @param leftSide - The X-coordinate of the front left edge of the candle.
-	 * @param rightSide - The X-coordinate of the front right edge of the candle.
-	 * @param middle - The X-coordinate of the center depth.
-	 * @param yCenter - The Y-coordinate of the center of the candle.
-	 * @param candleHeight - The height of the candle in pixels.
-	 * @param highY - The Y-coordinate of the highest point of the candle.
-	 * @param lowY - The Y-coordinate of the lowest point of the candle.
-	 * @param openY - The Y-coordinate of the opening price.
-	 * @param closeY - The Y-coordinate of the closing price.
-	 * @param fillColor - The fill color of the candle.
-	 * @param borderColor - The border color of the candle.
-	 * @param isUp - Indicates if the candle is upward-moving.
-	 * @param barSpacing - The spacing factor between bars.
-	 */
-	private _draw3d(
-		ctx: CanvasRenderingContext2D,
-		xCenter: number,
-		high: number,
-		low: number,
-		open: number,
-		close: number,
-		candleWidth: number,
-		combinedWidth: number,
-		fillColor: string,
-		borderColor: string,
-		isUp: boolean,
-		barSpacing:number
-	): void {
-		const xOffset = -Math.max(combinedWidth,1) * (1-barSpacing) ;
-		const insideColor = darkenColor(fillColor, 0.666); // Darker side color
-		const sideColor = darkenColor(fillColor,0.333)
-		const topColor = darkenColor(fillColor, 0.2);  // Slightly lighter top face
-	
-		// Calculate front face X coordinates using candleWidth
-		const frontLeftX = xCenter - candleWidth/2 ;
-		const frontRightX = (xCenter-candleWidth/2) + (combinedWidth)+xOffset;
-	
-		// Calculate back face X coordinates with combined width for depth effect
-		const backLeftX = frontLeftX - xOffset;
-		const backRightX = frontRightX - xOffset;
-	
-		// Set Y coordinates for front and back faces based on candle direction
-		let frontTop, frontBottom, backTop, backBottom;
-	
-		if (!isUp) {
-			// Up candle: front face uses open/high, back face uses low/close
-			frontTop = open;
-			frontBottom = high;
-			backTop = low;
-			backBottom = close;
-		} else {
-			// Down candle: front face uses open/low, back face uses high/close
-			frontTop = open;
-			frontBottom = low;
-			backTop = high;
-			backBottom = close;
-		}
-	
-		// Draw back (shadow) rectangle
-		ctx.fillStyle = sideColor;
-		ctx.strokeStyle = borderColor;
-		//ctx.beginPath();
-		//ctx.rect(backLeftX, backTop, (combinedWidth)+xOffset-(candleWidth/2), backBottom - backTop);
-		//ctx.fill();
-		//ctx.stroke();
-	
-		// Draw top face between front and back
-		ctx.fillStyle = topColor;
-		
-
-
-			if (isUp) {
-				// Draw bottom face first for up candles
-				ctx.fillStyle = insideColor;
-				ctx.beginPath();
-				ctx.moveTo(frontLeftX, frontBottom);   // Bottom-left corner at the front
-				ctx.lineTo(backLeftX, backBottom);     // Bottom-left corner at the back
-				ctx.lineTo(backRightX, backBottom);    // Bottom-right corner at the back
-				ctx.lineTo(frontRightX, frontBottom);  // Bottom-right corner at the front
-				ctx.closePath();
-				ctx.fill();
-				ctx.stroke();
-		
-				// Draw left side face for up candles
-				ctx.fillStyle = insideColor;
-				ctx.beginPath();
-				ctx.moveTo(frontLeftX, frontTop);      // Top-left corner at the front
-				ctx.lineTo(backLeftX, backTop);        // Top-left corner at the back
-				ctx.lineTo(backLeftX, backBottom);     // Bottom-left corner at the back
-				ctx.lineTo(frontLeftX, frontBottom);   // Bottom-left corner at the front
-				ctx.closePath();
-				ctx.fill();
-				ctx.stroke();
-		
-				// Draw right side face for up candles
-				ctx.fillStyle = insideColor;
-				ctx.beginPath();
-				ctx.moveTo(frontRightX, frontTop);     // Top-right corner at the front
-				ctx.lineTo(backRightX, backTop);       // Top-right corner at the back
-				ctx.lineTo(backRightX, backBottom);    // Bottom-right corner at the back
-				ctx.lineTo(frontRightX, frontBottom);  // Bottom-right corner at the front
-				ctx.closePath();
-				ctx.fill();
-				ctx.stroke();
-		
-				// Draw top face last for up candles
-				ctx.fillStyle = topColor;
-				ctx.beginPath();
-				ctx.moveTo(frontLeftX, frontTop);      // Top-left corner at the front
-				ctx.lineTo(backLeftX, backTop);        // Top-left corner at the back
-				ctx.lineTo(backRightX, backTop);       // Top-right corner at the back
-				ctx.lineTo(frontRightX, frontTop);     // Top-right corner at the front
-				ctx.closePath();
-				ctx.fill();
-				ctx.stroke();
-			} else {
-				// Draw top face first for down candles
-				ctx.fillStyle = topColor;
-				ctx.beginPath();
-				ctx.moveTo(frontLeftX, frontTop);      // Top-left corner at the front
-				ctx.lineTo(backLeftX, backTop);        // Top-left corner at the back
-				ctx.lineTo(backRightX, backTop);       // Top-right corner at the back
-				ctx.lineTo(frontRightX, frontTop);     // Top-right corner at the front
-				ctx.closePath();
-				ctx.fill();
-				ctx.stroke();
-		
-				// Draw right side face for down candles
-				ctx.fillStyle = sideColor;
-				ctx.beginPath();
-				ctx.moveTo(frontRightX, frontTop);     // Top-right corner at the front
-				ctx.lineTo(backRightX, backTop);       // Top-right corner at the back
-				ctx.lineTo(backRightX, backBottom);    // Bottom-right corner at the back
-				ctx.lineTo(frontRightX, frontBottom);  // Bottom-right corner at the front
-				ctx.closePath();
-				ctx.fill();
-				ctx.stroke();
-		
-				// Draw left side face for down candles
-				ctx.fillStyle = sideColor;
-				ctx.beginPath();
-				ctx.moveTo(frontLeftX, frontTop);      // Top-left corner at the front
-				ctx.lineTo(backLeftX, backTop);        // Top-left corner at the back
-				ctx.lineTo(backLeftX, backBottom);     // Bottom-left corner at the back
-				ctx.lineTo(frontLeftX, frontBottom);   // Bottom-left corner at the front
-				ctx.closePath();
-				ctx.fill();
-				ctx.stroke();
-		
-				// Draw bottom face last for down candles
-				ctx.fillStyle = sideColor;
-				ctx.beginPath();
-				ctx.moveTo(frontLeftX, frontBottom);   // Bottom-left corner at the front
-				ctx.lineTo(backLeftX, backBottom);     // Bottom-left corner at the back
-				ctx.lineTo(backRightX, backBottom);    // Bottom-right corner at the back
-				ctx.lineTo(frontRightX, frontBottom);  // Bottom-right corner at the front
-				ctx.closePath();
-				ctx.fill();
-				ctx.stroke();
-			}
-		}
-		
-	
-	
-	
-
-
-	/**
-	 * Draws a polygon-shaped candle.
-	 * @param ctx - The canvas rendering context.
-	 * @param leftSide - The X-coordinate of the left edge of the polygon.
-	 * @param rightSide - The X-coordinate of the right edge of the polygon.
-	 * @param middle - The X-coordinate of the center depth.
-	 * @param yCenter - The Y-coordinate of the center of the polygon.
-	 * @param candleHeight - The height of the polygon in pixels.
-	 * @param highY - The Y-coordinate of the highest point of the polygon.
-	 * @param lowY - The Y-coordinate of the lowest point of the polygon.
-	 * @param isUp - Indicates if the polygon points upwards.
-	 */
-	private _drawPolygon(
-		ctx: CanvasRenderingContext2D,
-		leftSide: number,
-		rightSide: number,
-		yCenter: number,
-		candleHeight: number,
-		highY: number,
-		lowY: number,
-		isUp: boolean
-	): void {
-		const openCloseTop = yCenter + candleHeight / 2;
-		const openCloseBottom = yCenter - candleHeight / 2;
-
-		// Save the current canvas state before drawing.
-		ctx.save();
-		ctx.beginPath();
-
-		if (isUp) {
-			// Define the path for an upward-pointing polygon.
-			ctx.moveTo(leftSide, openCloseTop);
-			ctx.lineTo(rightSide, highY);
-			ctx.lineTo(rightSide, openCloseBottom);
-			ctx.lineTo(leftSide, lowY);
-		} else {
-			// Define the path for a downward-pointing polygon.
-			ctx.moveTo(leftSide, highY);
-			ctx.lineTo(rightSide, openCloseTop);
-			ctx.lineTo(rightSide, lowY);
-			ctx.lineTo(leftSide, openCloseBottom);
-		}
-
-		// Complete the path and apply styles.
-		ctx.closePath();
-		ctx.stroke();
-		ctx.fill();
-		// Restore the canvas state after drawing.
-		ctx.restore();
-	}
-
-	/**
-	 * Draws an arrow-shaped candle.
-	 * @param ctx - The canvas rendering context.
-	 * @param leftSide - The X-coordinate of the left edge of the arrow.
-	 * @param rightSide - The X-coordinate of the right edge of the arrow.
-	 * @param middle - The X-coordinate of the tip of the arrow.
-	 * @param yCenter - The Y-coordinate of the center of the arrow.
-	 * @param candleHeight - The height of the arrow in pixels.
-	 * @param highY - The Y-coordinate of the highest point of the arrow.
-	 * @param lowY - The Y-coordinate of the lowest point of the arrow.
-	 * @param isUp - Indicates if the arrow points upwards.
-	 */
-	private _drawArrow(
-		ctx: CanvasRenderingContext2D,
-		leftSide: number,
-		rightSide: number,
-		middle: number,
-		yCenter: number,
-		candleHeight: number,
-		highY: number,
-		lowY: number,
-		isUp: boolean
-	): void {
-		// Save the current canvas state before drawing.
-		ctx.save();
-		ctx.beginPath();
-
-		if (isUp) {
-			// Define the path for an upward-pointing arrow.
-			ctx.moveTo(leftSide, lowY);
-			ctx.lineTo(leftSide, yCenter + candleHeight / 2);
-			ctx.lineTo(middle, highY);
-			ctx.lineTo(rightSide, yCenter + candleHeight / 2);
-			ctx.lineTo(rightSide, lowY);
-			ctx.lineTo(middle, yCenter - candleHeight / 2);
-			ctx.lineTo(leftSide, lowY);
-		} else {
-			// Define the path for a downward-pointing arrow.
-			ctx.moveTo(leftSide, highY);
-			ctx.lineTo(leftSide, yCenter - candleHeight / 2);
-			ctx.lineTo(middle, lowY);
-			ctx.lineTo(rightSide, yCenter - candleHeight / 2);
-			ctx.lineTo(rightSide, highY);
-			ctx.lineTo(middle, yCenter + candleHeight / 2);
-			ctx.lineTo(leftSide, highY);
-		}
-
-		// Complete the path and apply styles.
-		ctx.closePath();
-		ctx.fill();
-		ctx.stroke();
-
-		// Restore the canvas state after drawing.
-		ctx.restore();
-	}
 }
+//
+//	/**
+//	 * Draws a rectangle-shaped candle.
+//	 * @param ctx - The canvas rendering context.
+//	 * @param leftSide - The X-coordinate of the left edge of the candle.
+//	 * @param rightSide - The X-coordinate of the right edge of the candle.
+//	 * @param yCenter - The Y-coordinate of the center of the candle.
+//	 * @param candleHeight - The height of the candle in pixels.
+//	 */
+//	private _drawCandle(
+//		ctx: CanvasRenderingContext2D,
+//		leftSide: number,
+//		rightSide: number,
+//		yCenter: number,
+//		candleHeight: number
+//	): void {
+//		const topEdge = yCenter - candleHeight / 2;
+//		const bottomEdge = yCenter + candleHeight / 2;
+//
+//		// Begin drawing the candle rectangle.
+//		ctx.beginPath();
+//		ctx.moveTo(leftSide, topEdge);
+//		ctx.lineTo(leftSide, bottomEdge);
+//		ctx.lineTo(rightSide, bottomEdge);
+//		ctx.lineTo(rightSide, topEdge);
+//		ctx.closePath();
+//
+//		// Fill and stroke the rectangle.
+//		ctx.fill();
+//		ctx.stroke();
+//	}
+//
+//		/**
+//	 * Draws a rounded rectangle-shaped candle with clamped corner radius.
+//	 * @param ctx - The canvas rendering context.
+//	 * @param leftSide - The X-coordinate of the left edge of the candle.
+//	 * @param rightSide - The X-coordinate of the right edge of the candle.
+//	 * @param yCenter - The Y-coordinate of the center of the candle.
+//	 * @param candleHeight - The height of the candle in pixels.
+//	 * @param radius - A float from 0..1 that we clamp to an appropriate max.
+//	 */
+//		private _drawRounded(
+//			ctx: CanvasRenderingContext2D,
+//			leftSide: number,
+//			rightSide: number,
+//			yCenter: number,
+//			candleHeight: number,
+//			radius: number
+//		  ) {
+//			const width = rightSide - leftSide;
+//		  
+//			// Optionally clamp radius if it's supposed to be 0..1
+//			const rawRadius = radius * Math.min(Math.abs(width), Math.abs(candleHeight));
+//			const effectiveRadius = Math.abs(Math.min(rawRadius, width / 2, candleHeight / 2));
+//		  
+//			const topEdge = yCenter - candleHeight / 2;
+//		  
+//			ctx.beginPath();
+//			if (typeof ctx.roundRect === 'function') {
+//			  ctx.roundRect(leftSide, topEdge, width, candleHeight, effectiveRadius);
+//			} else {
+//			  // Fallback: manually draw arcs or just do rect
+//			  ctx.rect(leftSide, topEdge, width, candleHeight);
+//			}
+//			ctx.fill();
+//			ctx.stroke();
+//		  }
+//		  
+//
+//	/**
+//	 * Draws an ellipse-shaped candle.
+//	 * @param ctx - The canvas rendering context.
+//	 * @param leftSide - The X-coordinate of the left edge of the ellipse.
+//	 * @param rightSide - The X-coordinate of the right edge of the ellipse.
+//	 * @param middle - The X-coordinate of the center of the ellipse.
+//	 * @param yCenter - The Y-coordinate of the center of the ellipse.
+//	 * @param candleHeight - The height of the ellipse in pixels.
+//	 * @param barSpacing - The spacing factor between bars.
+//	 */
+//	private _drawEllipse(
+//		ctx: CanvasRenderingContext2D,
+//		leftSide: number,
+//		rightSide: number,
+//		middle: number,
+//		yCenter: number,
+//		candleHeight: number,
+//	): void {
+//		// Calculate radii based on candle dimensions and spacing.
+//		const xRadius = (rightSide - leftSide) / 2;
+//		const yRadius = candleHeight / 2;
+//		const adjustedXCenter = middle;
+//
+//		// Begin drawing the ellipse.
+//		ctx.beginPath();
+//		ctx.ellipse(
+//			adjustedXCenter, // X-coordinate of the center.
+//			yCenter, // Y-coordinate of the center.
+//			Math.abs(xRadius), // Horizontal radius.
+//			Math.abs(yRadius), // Vertical radius.
+//			0, // Rotation angle.
+//			0, // Start angle.
+//			Math.PI * 2 // End angle.
+//		);
+//		ctx.fill();
+//		ctx.stroke();
+//	}
+//
+//
+//	/**
+//	 * Draws a 3D-shaped candle, providing a depth effect.
+//	 * @param ctx - The canvas rendering context.
+//	 * @param leftSide - The X-coordinate of the front left edge of the candle.
+//	 * @param rightSide - The X-coordinate of the front right edge of the candle.
+//	 * @param middle - The X-coordinate of the center depth.
+//	 * @param yCenter - The Y-coordinate of the center of the candle.
+//	 * @param candleHeight - The height of the candle in pixels.
+//	 * @param highY - The Y-coordinate of the highest point of the candle.
+//	 * @param lowY - The Y-coordinate of the lowest point of the candle.
+//	 * @param openY - The Y-coordinate of the opening price.
+//	 * @param closeY - The Y-coordinate of the closing price.
+//	 * @param fillColor - The fill color of the candle.
+//	 * @param borderColor - The border color of the candle.
+//	 * @param isUp - Indicates if the candle is upward-moving.
+//	 * @param barSpacing - The spacing factor between bars.
+//	 */
+//	private _draw3d(
+//		ctx: CanvasRenderingContext2D,
+//		xCenter: number,
+//		high: number,
+//		low: number,
+//		open: number,
+//		close: number,
+//		candleWidth: number,
+//		combinedWidth: number,
+//		fillColor: string,
+//		borderColor: string,
+//		isUp: boolean,
+//		barSpacing:number
+//	): void {
+//		const xOffset = -Math.max(combinedWidth,1) * (1-barSpacing) ;
+//		const insideColor = darkenColor(fillColor, 0.666); // Darker side color
+//		const sideColor = darkenColor(fillColor,0.333)
+//		const topColor = darkenColor(fillColor, 0.2);  // Slightly lighter top face
+//	
+//		// Calculate front face X coordinates using candleWidth
+//		const frontLeftX = xCenter - candleWidth/2 ;
+//		const frontRightX = (xCenter-candleWidth/2) + (combinedWidth)+xOffset;
+//	
+//		// Calculate back face X coordinates with combined width for depth effect
+//		const backLeftX = frontLeftX - xOffset;
+//		const backRightX = frontRightX - xOffset;
+//	
+//		// Set Y coordinates for front and back faces based on candle direction
+//		let frontTop, frontBottom, backTop, backBottom;
+//	
+//		if (!isUp) {
+//			// Up candle: front face uses open/high, back face uses low/close
+//			frontTop = open;
+//			frontBottom = high;
+//			backTop = low;
+//			backBottom = close;
+//		} else {
+//			// Down candle: front face uses open/low, back face uses high/close
+//			frontTop = open;
+//			frontBottom = low;
+//			backTop = high;
+//			backBottom = close;
+//		}
+//	
+//		// Draw back (shadow) rectangle
+//		ctx.fillStyle = sideColor;
+//		ctx.strokeStyle = borderColor;
+//		//ctx.beginPath();
+//		//ctx.rect(backLeftX, backTop, (combinedWidth)+xOffset-(candleWidth/2), backBottom - backTop);
+//		//ctx.fill();
+//		//ctx.stroke();
+//	
+//		// Draw top face between front and back
+//		ctx.fillStyle = topColor;
+//		
+//
+//
+//			if (isUp) {
+//				// Draw bottom face first for up candles
+//				ctx.fillStyle = insideColor;
+//				ctx.beginPath();
+//				ctx.moveTo(frontLeftX, frontBottom);   // Bottom-left corner at the front
+//				ctx.lineTo(backLeftX, backBottom);     // Bottom-left corner at the back
+//				ctx.lineTo(backRightX, backBottom);    // Bottom-right corner at the back
+//				ctx.lineTo(frontRightX, frontBottom);  // Bottom-right corner at the front
+//				ctx.closePath();
+//				ctx.fill();
+//				ctx.stroke();
+//		
+//				// Draw left side face for up candles
+//				ctx.fillStyle = insideColor;
+//				ctx.beginPath();
+//				ctx.moveTo(frontLeftX, frontTop);      // Top-left corner at the front
+//				ctx.lineTo(backLeftX, backTop);        // Top-left corner at the back
+//				ctx.lineTo(backLeftX, backBottom);     // Bottom-left corner at the back
+//				ctx.lineTo(frontLeftX, frontBottom);   // Bottom-left corner at the front
+//				ctx.closePath();
+//				ctx.fill();
+//				ctx.stroke();
+//		
+//				// Draw right side face for up candles
+//				ctx.fillStyle = insideColor;
+//				ctx.beginPath();
+//				ctx.moveTo(frontRightX, frontTop);     // Top-right corner at the front
+//				ctx.lineTo(backRightX, backTop);       // Top-right corner at the back
+//				ctx.lineTo(backRightX, backBottom);    // Bottom-right corner at the back
+//				ctx.lineTo(frontRightX, frontBottom);  // Bottom-right corner at the front
+//				ctx.closePath();
+//				ctx.fill();
+//				ctx.stroke();
+//		
+//				// Draw top face last for up candles
+//				ctx.fillStyle = topColor;
+//				ctx.beginPath();
+//				ctx.moveTo(frontLeftX, frontTop);      // Top-left corner at the front
+//				ctx.lineTo(backLeftX, backTop);        // Top-left corner at the back
+//				ctx.lineTo(backRightX, backTop);       // Top-right corner at the back
+//				ctx.lineTo(frontRightX, frontTop);     // Top-right corner at the front
+//				ctx.closePath();
+//				ctx.fill();
+//				ctx.stroke();
+//			} else {
+//				// Draw top face first for down candles
+//				ctx.fillStyle = topColor;
+//				ctx.beginPath();
+//				ctx.moveTo(frontLeftX, frontTop);      // Top-left corner at the front
+//				ctx.lineTo(backLeftX, backTop);        // Top-left corner at the back
+//				ctx.lineTo(backRightX, backTop);       // Top-right corner at the back
+//				ctx.lineTo(frontRightX, frontTop);     // Top-right corner at the front
+//				ctx.closePath();
+//				ctx.fill();
+//				ctx.stroke();
+//		
+//				// Draw right side face for down candles
+//				ctx.fillStyle = sideColor;
+//				ctx.beginPath();
+//				ctx.moveTo(frontRightX, frontTop);     // Top-right corner at the front
+//				ctx.lineTo(backRightX, backTop);       // Top-right corner at the back
+//				ctx.lineTo(backRightX, backBottom);    // Bottom-right corner at the back
+//				ctx.lineTo(frontRightX, frontBottom);  // Bottom-right corner at the front
+//				ctx.closePath();
+//				ctx.fill();
+//				ctx.stroke();
+//		
+//				// Draw left side face for down candles
+//				ctx.fillStyle = sideColor;
+//				ctx.beginPath();
+//				ctx.moveTo(frontLeftX, frontTop);      // Top-left corner at the front
+//				ctx.lineTo(backLeftX, backTop);        // Top-left corner at the back
+//				ctx.lineTo(backLeftX, backBottom);     // Bottom-left corner at the back
+//				ctx.lineTo(frontLeftX, frontBottom);   // Bottom-left corner at the front
+//				ctx.closePath();
+//				ctx.fill();
+//				ctx.stroke();
+//		
+//				// Draw bottom face last for down candles
+//				ctx.fillStyle = sideColor;
+//				ctx.beginPath();
+//				ctx.moveTo(frontLeftX, frontBottom);   // Bottom-left corner at the front
+//				ctx.lineTo(backLeftX, backBottom);     // Bottom-left corner at the back
+//				ctx.lineTo(backRightX, backBottom);    // Bottom-right corner at the back
+//				ctx.lineTo(frontRightX, frontBottom);  // Bottom-right corner at the front
+//				ctx.closePath();
+//				ctx.fill();
+//				ctx.stroke();
+//			}
+//		}
+//		
+//	
+//	
+//	
+//
+//
+//	/**
+//	 * Draws a polygon-shaped candle.
+//	 * @param ctx - The canvas rendering context.
+//	 * @param leftSide - The X-coordinate of the left edge of the polygon.
+//	 * @param rightSide - The X-coordinate of the right edge of the polygon.
+//	 * @param middle - The X-coordinate of the center depth.
+//	 * @param yCenter - The Y-coordinate of the center of the polygon.
+//	 * @param candleHeight - The height of the polygon in pixels.
+//	 * @param highY - The Y-coordinate of the highest point of the polygon.
+//	 * @param lowY - The Y-coordinate of the lowest point of the polygon.
+//	 * @param isUp - Indicates if the polygon points upwards.
+//	 */
+//	private _drawPolygon(
+//		ctx: CanvasRenderingContext2D,
+//		leftSide: number,
+//		rightSide: number,
+//		yCenter: number,
+//		candleHeight: number,
+//		highY: number,
+//		lowY: number,
+//		isUp: boolean
+//	): void {
+//		const openCloseTop = yCenter + candleHeight / 2;
+//		const openCloseBottom = yCenter - candleHeight / 2;
+//
+//		// Save the current canvas state before drawing.
+//		ctx.save();
+//		ctx.beginPath();
+//
+//		if (isUp) {
+//			// Define the path for an upward-pointing polygon.
+//			ctx.moveTo(leftSide, openCloseTop);
+//			ctx.lineTo(rightSide, highY);
+//			ctx.lineTo(rightSide, openCloseBottom);
+//			ctx.lineTo(leftSide, lowY);
+//		} else {
+//			// Define the path for a downward-pointing polygon.
+//			ctx.moveTo(leftSide, highY);
+//			ctx.lineTo(rightSide, openCloseTop);
+//			ctx.lineTo(rightSide, lowY);
+//			ctx.lineTo(leftSide, openCloseBottom);
+//		}
+//
+//		// Complete the path and apply styles.
+//		ctx.closePath();
+//		ctx.stroke();
+//		ctx.fill();
+//		// Restore the canvas state after drawing.
+//		ctx.restore();
+//	}
+//
+//	/**
+//	 * Draws an arrow-shaped candle.
+//	 * @param ctx - The canvas rendering context.
+//	 * @param leftSide - The X-coordinate of the left edge of the arrow.
+//	 * @param rightSide - The X-coordinate of the right edge of the arrow.
+//	 * @param middle - The X-coordinate of the tip of the arrow.
+//	 * @param yCenter - The Y-coordinate of the center of the arrow.
+//	 * @param candleHeight - The height of the arrow in pixels.
+//	 * @param highY - The Y-coordinate of the highest point of the arrow.
+//	 * @param lowY - The Y-coordinate of the lowest point of the arrow.
+//	 * @param isUp - Indicates if the arrow points upwards.
+//	 */
+//	private _drawArrow(
+//		ctx: CanvasRenderingContext2D,
+//		leftSide: number,
+//		rightSide: number,
+//		middle: number,
+//		yCenter: number,
+//		candleHeight: number,
+//		highY: number,
+//		lowY: number,
+//		isUp: boolean
+//	): void {
+//		// Save the current canvas state before drawing.
+//		ctx.save();
+//		ctx.beginPath();
+//
+//		if (isUp) {
+//			// Define the path for an upward-pointing arrow.
+//			ctx.moveTo(leftSide, lowY);
+//			ctx.lineTo(leftSide, yCenter + candleHeight / 2);
+//			ctx.lineTo(middle, highY);
+//			ctx.lineTo(rightSide, yCenter + candleHeight / 2);
+//			ctx.lineTo(rightSide, lowY);
+//			ctx.lineTo(middle, yCenter - candleHeight / 2);
+//			ctx.lineTo(leftSide, lowY);
+//		} else {
+//			// Define the path for a downward-pointing arrow.
+//			ctx.moveTo(leftSide, highY);
+//			ctx.lineTo(leftSide, yCenter - candleHeight / 2);
+//			ctx.lineTo(middle, lowY);
+//			ctx.lineTo(rightSide, yCenter - candleHeight / 2);
+//			ctx.lineTo(rightSide, highY);
+//			ctx.lineTo(middle, yCenter + candleHeight / 2);
+//			ctx.lineTo(leftSide, highY);
+//		}
+//
+//		// Complete the path and apply styles.
+//		ctx.closePath();
+//		ctx.fill();
+//		ctx.stroke();
+//
+//		// Restore the canvas state after drawing.
+//		ctx.restore();
+//	}
+
