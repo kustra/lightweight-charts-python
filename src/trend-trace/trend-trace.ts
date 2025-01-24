@@ -882,65 +882,52 @@ export class TrendTracePaneRenderer
       ctx.lineWidth = bar.lineWidth ?? 1;
       setLineStyle(ctx, bar.lineStyle as LineStyle);
 
-      switch (this._source._sequence._options.shape?? this._options.shape ??  "Rounded") {
-        case "Rectangle":
-          ohlcRectangle(ctx, leftSide, rightSide, barY, barVerticalSpan);
-          break;
-        case "Rounded":
-          ohlcRounded(ctx, leftSide, rightSide, barY, barVerticalSpan, 5);
-          break;
-        case "Ellipse":
-          ohlcEllipse(ctx, leftSide, rightSide, middle, barY, barVerticalSpan);
-          break;
-        case "Arrow":
-          ohlcArrow(
-            ctx,
-            leftSide,
-            rightSide,
-            middle,
-            barY,
-            barVerticalSpan,
-            scaledHigh,
-            scaledLow,
-            isUp
-          );
-          break;
-        case "3d":
-          ohlc3d(
-            ctx,
-            bar.scaledX1,
-            scaledHigh,
-            scaledLow,
-            scaledOpen,
-            scaledClose,
-            candleBodyWidth,
-            candleBodyWidth,
-            ctx.fillStyle,
-            ctx.strokeStyle,
-            isUp,
-            barSpace
-          );
-          break;
-        case "Polygon":
-          ohlcPolygon(
-            ctx,
-            leftSide,
-            rightSide,
-            barY,
-            barVerticalSpan,
-            scaledHigh,
-            scaledLow,
-            isUp
-          );
-          break;
-        default:
-          ohlcRectangle(ctx, leftSide, rightSide, barY, barVerticalSpan);
-          break;
-      }
-    });
+      const shape = this._options?.shape 
+      || CandleShape.Rounded; // Use the enum value for defaults
+  
+  console.log("Selected candle shape:", shape);
+  
+  switch (shape) {
+    case CandleShape.Rectangle:
+      ohlcRectangle(ctx, leftSide, rightSide, barY, barVerticalSpan);
+      break;
+    case CandleShape.Rounded:
+      ohlcRounded(ctx, leftSide, rightSide, barY, barVerticalSpan, 5);
+      break;
+    case CandleShape.Ellipse:
+      ohlcEllipse(ctx, leftSide, rightSide, middle, barY, barVerticalSpan);
+      break;
+    case CandleShape.Arrow:
+      ohlcArrow(ctx, leftSide, rightSide, middle, barY, barVerticalSpan, scaledHigh, scaledLow, isUp);
+      break;
+    case CandleShape.Cube:
+      ohlc3d(
+        ctx,
+        bar.scaledX1,
+        scaledHigh,
+        scaledLow,
+        scaledOpen,
+        scaledClose,
+        candleBodyWidth,
+        candleBodyWidth,
+        ctx.fillStyle,
+        ctx.strokeStyle,
+        isUp,
+        barSpace
+      );
+      break;
+    case CandleShape.Polygon:
+      ohlcPolygon(ctx, leftSide, rightSide, barY, barVerticalSpan, scaledHigh, scaledLow, isUp);
+      break;
+    default:
+      console.warn(`Unknown shape '${shape}', using default Rectangle`);
+      ohlcRectangle(ctx, leftSide, rightSide, barY, barVerticalSpan);
+      break;
+    }
+  
 
     ctx.restore();
-  }
+  })}
 
   public _drawEndCircle(
     scope: BitmapCoordinatesRenderingScope,

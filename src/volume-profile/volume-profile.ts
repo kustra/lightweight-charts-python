@@ -16,7 +16,6 @@ import {
   Logical,
   SeriesType,
   Time,
-  HistogramData,
   LineStyle,
   LogicalRange,
   SeriesPrimitivePaneViewZOrder,
@@ -241,11 +240,11 @@ export class VolumeProfile
     this.update();
   }
   // The DOM event callbacks
-  private _handleDomMouseDown = (ev: MouseEvent) => {
+  private _handleDomMouseDown = () => {
     // If you want to track raw DOM mousedown
     // (optionally do nothing, or set internal state).
   };
-  private _handleDomMouseUp = (ev: MouseEvent) => {
+  private _handleDomMouseUp = () => {
     // If user physically let go anywhere, we finalize the drag
     // ...
     this._onMouseUp();
@@ -713,7 +712,7 @@ export class VolumeProfile
   /**
    * If you want autoscaling, define it
    */
-  public autoscaleInfo(start: Logical, end: Logical): AutoscaleInfo | null {
+  public autoscaleInfo(): AutoscaleInfo | null {
     if (!this._vpData.profile.length) return null;
     return {
       priceRange: {
@@ -755,7 +754,6 @@ class VolumeProfilePaneView implements ISeriesPrimitivePaneView {
   private _x: Coordinate | null = null;
   private _width: number = 0;
   private _items: VolumeProfileItem[] = [];
-  private _rightSide: boolean;
   private _maxVolume: number;
   public visibleRange: Range | null = null;
   _p1: ViewPoint = { x: null, y: null };
@@ -763,7 +761,6 @@ class VolumeProfilePaneView implements ISeriesPrimitivePaneView {
 
   constructor(source: VolumeProfile) {
     this._source = source;
-    this._rightSide = this._source._options.rightSide ?? true;
     // compute maxVolume from the profile
     this._maxVolume = this._source._vpData.profile.reduce((acc, bin) => {
       return Math.max(acc, bin.upData + bin.downData);
@@ -909,7 +906,7 @@ export class VolumeProfileRenderer
     this.p2 = p2;
   }
 
-  draw(target: CanvasRenderingTarget2D): void {}
+  draw(): void {}
 
   drawBackground(target: CanvasRenderingTarget2D): void {
     console.log(
@@ -923,7 +920,7 @@ export class VolumeProfileRenderer
       setLineStyle(ctx, this.options.lineStyle);
 
       // Draw the volume profile bars
-      this._data.items.forEach((row, index) => {
+      this._data.items.forEach((row) => {
         if (row.y1 === null || row.y2 === null) return;
         if (this._data.x === null) return; // Ensure x-coordinate is valid
 
