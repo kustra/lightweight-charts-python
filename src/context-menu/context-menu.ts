@@ -13,8 +13,6 @@ import {
   SolidColor,
   VerticalGradientColor,
   Background,
-  HistogramData,
-  ISeriesApi,
 } from "lightweight-charts";
 // ----------------------------------
 // Internal Helpers and Types
@@ -72,13 +70,8 @@ import { TwoPointDrawing } from "../drawing/two-point-drawing";
 import {
   defaultVolumeProfileOptions,
   VolumeProfile,
-  VolumeProfileOptions,
 } from "../volume-profile/volume-profile";
-import {
-  defaultSequenceOptions,
-  DataPoint,
-  Sequence,
-} from "../trend-trace/sequence";
+import { defaultSequenceOptions, DataPoint } from "../trend-trace/sequence";
 import { PluginBase } from "../plugin-base";
 // ----------------------------------
 // If you have actual code referencing commented-out or removed imports,
@@ -462,7 +455,6 @@ export class ContextMenu {
   private addCheckbox(
     label: string,
     value: boolean,
-    defaultValue: boolean,
     onChange: (value: boolean) => void
   ): HTMLElement {
     return this.addMenuInput(this.div, {
@@ -1324,7 +1316,7 @@ export class ContextMenu {
       this.addMenuItem(
         "Volume Profile ▸",
         () => {
-          this._createVolumeProfile(event, drawing as TwoPointDrawing);
+          this._createVolumeProfile(drawing as TwoPointDrawing);
         },
         false,
         true
@@ -1856,7 +1848,6 @@ export class ContextMenu {
         this.addCheckbox(
           camelToTitle(optionName),
           optionValue,
-          optionValue,
 
           (newValue: boolean) => {
             const options = buildOptions(optionName, newValue);
@@ -2023,7 +2014,6 @@ export class ContextMenu {
       } else if (option.type === "boolean") {
         this.addCheckbox(
           camelToTitle(option.name),
-          currentValue,
           currentValue,
           (newValue) => {
             const updatedOptions = buildOptions(option.valuePath!, newValue);
@@ -2251,7 +2241,6 @@ export class ContextMenu {
         ) as boolean;
         this.addCheckbox(
           camelToTitle(option.name),
-          currentValue,
           currentValue,
           (newValue) => {
             const updatedOptions = buildOptions(option.valuePath!, newValue);
@@ -2765,10 +2754,7 @@ export class ContextMenu {
       }
     });
   }
-  public _createVolumeProfile(
-    event: MouseEvent,
-    drawing: TwoPointDrawing
-  ): void {
+  public _createVolumeProfile(drawing: TwoPointDrawing): void {
     const series = this.handler.series ?? this.handler._seriesList[0];
     if (series && drawing.p1 && drawing.p2) {
       console.log("Series selected:", series.options().title);
@@ -2967,7 +2953,7 @@ export class ContextMenu {
           valuePath: "barSpacing",
           defaultValue: currentOptions.barSpacing ?? 0.8,
           min: 0.1,
-          max: 2,
+          max: 10,
           step: 0.1,
         },
         {
@@ -2985,12 +2971,11 @@ export class ContextMenu {
           valuePath: "shape",
           defaultValue: currentOptions.shape ?? "Rounded",
           options: [
-            "Rectangle",
-            "Rounded",
-            "Ellipse",
-            "Arrow",
-            "3d",
-            "Polygon",
+            { label: "Rectangle", value: CandleShape.Rectangle },
+            { label: "Rounded", value: CandleShape.Rounded },
+            { label: "Ellipse", value: CandleShape.Ellipse },
+            { label: "Arrow", value: CandleShape.Arrow },
+            { label: "Polygon", value: CandleShape.Polygon },
           ],
         },
         {
@@ -3076,7 +3061,6 @@ export class ContextMenu {
       } else if (option.type === "boolean") {
         this.addCheckbox(
           camelToTitle(option.name),
-          option.defaultValue,
           option.defaultValue,
 
           (newValue: boolean) => {
@@ -3278,7 +3262,6 @@ export class ContextMenu {
       } else if (option.type === "boolean") {
         this.addCheckbox(
           camelToTitle(option.name),
-          option.defaultValue,
 
           option.defaultValue,
           (newValue: boolean) => {

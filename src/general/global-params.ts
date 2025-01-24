@@ -1,5 +1,5 @@
 import { MouseEventParams,  ISeriesPrimitive } from "lightweight-charts";
-import { ISeriesApiExtended } from "../helpers/general";
+import { ISeriesApiExtended } from "../helpers/series";
 export interface GlobalParams extends Window {
     pane: paneStyle;    // TODO shouldnt need this cause of css variables
     handlerInFocus: string;
