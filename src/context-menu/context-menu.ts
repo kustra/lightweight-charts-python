@@ -13,6 +13,8 @@ import {
   SolidColor,
   VerticalGradientColor,
   Background,
+  ISeriesApi,
+  SeriesType,
 } from "lightweight-charts";
 // ----------------------------------
 // Internal Helpers and Types
@@ -73,6 +75,9 @@ import {
 } from "../volume-profile/volume-profile";
 import { defaultSequenceOptions, DataPoint } from "../trend-trace/sequence";
 import { PluginBase } from "../plugin-base";
+import { StopLossTakeProfit } from "../user-lines/trade-lines";
+import { ohlcSeries } from "../ohlc-series/ohlc-series";
+import { setOpacity } from "../helpers/colors";
 // ----------------------------------
 // If you have actual code referencing commented-out or removed imports,
 // reintroduce them accordingly.
@@ -834,6 +839,41 @@ export class ContextMenu {
       const options = buildOptions(optionPath, newColor);
       optionTarget.applyOptions(options);
       console.log(`Updated ${optionPath} to ${newColor}`);
+      // If optionTarget is a series and the option is color-based, update LegendSeries colors
+      const isSeries = (target: any): target is ISeriesApi<any> => {
+        return (
+          typeof target === "object" &&
+          target !== null &&
+          // Some property check to confirm it's ISeriesApiExtended
+          typeof target.applyOptions === "function" &&
+          typeof target.dataByIndex === "function"
+        );
+      };
+
+      if (
+        isSeries(optionTarget) &&
+        ["color", "lineColor", "upColor", "downColor"].includes(optionPath)
+      ) {
+        // Attempt to find the legend item in the legend _lines array
+        const legendItem = this.handler.legend._lines.find(
+          (item) => item.series === optionTarget
+        );
+
+        if (legendItem) {
+          // Map the relevant color to the correct index
+          // color, lineColor, upColor => index 0
+          // downColor => index 1
+          if (optionPath === "downColor") {
+            legendItem.colors[1] = newColor;
+            console.log(`Legend down color updated to: ${newColor}`);
+          } else {
+            legendItem.colors[0] = newColor;
+            console.log(`Legend up/main color updated to: ${newColor}`);
+          }
+        }
+      }
+
+
     };
 
     menuItem.addEventListener("click", (event: MouseEvent) => {
@@ -1051,7 +1091,28 @@ export class ContextMenu {
     // Assign the temp arrays to class-level arrays for use in submenus
     this.currentWidthOptions = tempWidthOptions;
     this.currentStyleOptions = tempStyleOptions;
+    this.addTextInput(
+      "Title",
+      series.options().title || "", // Default to empty string if no title exists
+      (newValue: string) => {
+        const options = { title: newValue };
+                // Remove old entry and re-add with new title
+      if (this.handler.seriesMap.has(series.options().title)) {
+          this.handler.seriesMap.delete(series.options().title);
+        }
+        this.handler.seriesMap.set(newValue, series);
+        console.log(`Updated seriesMap label to: ${newValue}`);
 
+                // Update the legend title
+        const legendItem = this.handler.legend._lines.find(item => item.series === series);
+        if (legendItem && legendItem.series === series) {
+          legendItem.name = newValue;
+          console.log(`Updated legend title to: ${newValue}`);
+        }
+        series.applyOptions(options);
+        console.log(`Updated title to: ${newValue}`);
+      }
+    );
     // Inside populateSeriesMenu (already in your code above)
     this.addMenuItem(
       "Clone Series ▸",
@@ -1627,6 +1688,34 @@ export class ContextMenu {
         true
       );
     }
+    //this.addMenuItem(
+    //  "Stop Loss / Take Profit ▸",
+    //  () => {
+    //      // If not attached yet, attach it
+    //      if (!primitives["StopLossTakeProfit"]) {
+    //          const sltp = new StopLossTakeProfit(
+    //              this.handler.chart,
+    //              series,
+    //              {
+    //                  color: '#444',
+    //                  hoverColor: '#888',
+    //                  backgroundColorStop: 'rgba(255,0,0,0.3)',
+    //                  backgroundColorTarget: 'rgba(0,255,0,0.3)',
+    //                  extendRightBars: 15,
+    //              }
+    //          );
+    //          primitives["StopLossTakeProfit"] = sltp;
+    //          console.log("StopLossTakeProfit attached");
+    //      } else {
+    //          console.log("StopLossTakeProfit already exists, customizing...");
+    //          // If you want to open a submenu to customize,
+    //          // e.g., setStopLoss, setTakeProfit, etc.
+    //      }
+    //  },
+    //  false,
+    //  true
+    //);//
+    
     // Add a Back option
     this.addMenuItem(
       "⤝ Back",
@@ -1639,13 +1728,12 @@ export class ContextMenu {
 
     this.showMenu(event);
   }
-
   private populateStyleMenu(
     event: MouseEvent,
     series: ISeriesApiExtended
   ): void {
     this.div.innerHTML = ""; // Clear the current menu
-
+  
     this.currentStyleOptions.forEach((option) => {
       const predefinedOptions = this.getPredefinedOptions(option.name);
       if (predefinedOptions) {
@@ -1655,13 +1743,13 @@ export class ContextMenu {
           predefinedOptions,
           (newValue: string) => {
             let finalValue: unknown = newValue;
-
+  
             // If the option name indicates it's a line style, map string => numeric
             if (option.name.toLowerCase().includes("style")) {
               const lineStyleMap: Record<string, number> = {
-                Solid: 0,
-                Dotted: 1,
-                Dashed: 2,
+                "Solid": 0,
+                "Dotted": 1,
+                "Dashed": 2,
                 "Large Dashed": 3,
                 "Sparse Dotted": 4,
               };
@@ -1676,21 +1764,52 @@ export class ContextMenu {
               };
               finalValue = lineTypeMap[newValue] ?? 0; // fallback to Simple (0)
             }
-
+  
             // Build the updated options object
             const updatedOptions = buildOptions(option.name, finalValue);
             series.applyOptions(updatedOptions);
-            console.log(
-              `Updated ${option.name} to "${newValue}" =>`,
-              finalValue
-            );
+            console.log(`Updated ${option.name} to "${newValue}" =>`, finalValue);
+  
+            // --- Update the Legend Symbol if it's a lineStyle change on a Line series ---
+            if (
+              option.name.toLowerCase().includes("style") && 
+              series.seriesType() === "Line"
+            ) {
+              // Convert the numeric finalValue into a symbol
+              const lineStyleNumeric = finalValue as number;
+              const symbol = (() => {
+                switch (lineStyleNumeric) {
+                  case 0:
+                    return "―";     // Solid
+                  case 1:
+                    return "··";   // Dotted
+                  case 2:
+                    return "--";    // Dashed
+                  case 3:
+                    return "- -";   // Large Dashed
+                  case 4:
+                    return "· ·";   // Sparse Dotted
+                  default:
+                    return "~";     // Fallback
+                }
+              })();
+  
+              // Find the corresponding legend item in the legend._lines array
+              const legendItem = this.handler.legend._lines.find(
+                (item) => item.series === series
+              );
+              if (legendItem) {
+                legendItem.legendSymbol = [symbol];
+                console.log(`Updated legend symbol for lineStyle(${lineStyleNumeric}) to: ${symbol}`);
+              }
+            }
           }
         );
       } else {
         console.warn(`No predefined options found for "${option.name}".`);
       }
     });
-
+  
     // Add a Back option
     this.addMenuItem(
       "⤝ Back",
@@ -1700,9 +1819,10 @@ export class ContextMenu {
       false,
       false
     );
-
+  
     this.showMenu(event);
   }
+  
 
   private populateCloneSeriesMenu(
     series: ISeriesApiExtended,
@@ -2281,18 +2401,42 @@ export class ContextMenu {
     this.div.innerHTML = ""; // Clear current menu
 
     if (series) {
-      // Option to switch the price scale for the series
-      this.addMenuItem(
-        "Switch Series Price Scale",
-        () => {
-          const newPriceScaleId = priceScaleId === "left" ? "right" : "left";
-          series.applyOptions({ priceScaleId: newPriceScaleId });
-          console.log(`Series price scale switched to: ${newPriceScaleId}`);
-          this.populatePriceScaleMenu(event, newPriceScaleId, series);
+      this.addMenuInput(
+        this.div,
+        {
+        type: "hybrid",
+        label: "Price Scale",
+        value: series.options().priceScaleId || "",
+        onChange: (newValue: string) => {
+        series.applyOptions({ priceScaleId: newValue });
+        console.log(`Updated price scale to: ${newValue}`);
         },
-        false,
-        false
-      );
+        hybridConfig: {
+        defaultAction: () => {
+        const newPriceScaleId = series.options().priceScaleId === "left" ? "right" : "left";
+        series.applyOptions({ priceScaleId: newPriceScaleId });
+        console.log(`Series price scale switched to: ${newPriceScaleId}`);
+        },
+        options: [
+        { name: "Left", action: () => series.applyOptions({ priceScaleId: "left" }) },
+        { name: "Right", action: () => series.applyOptions({ priceScaleId: "right" }) },
+        { name: "Volume", action: () => series.applyOptions({ priceScaleId: "volume_scale" }) },
+        { name: "Custom", action: () => {
+        const inputContainer = document.createElement("div");
+        const inputField = document.createElement("input");
+        inputField.type = "text";
+        inputField.placeholder = "Enter custom scale ID";
+        inputField.value = series.options().priceScaleId || "";
+        inputField.addEventListener("change", () => {
+        series.applyOptions({ priceScaleId: inputField.value });
+        console.log(`Custom scale ID set to: ${inputField.value}`);
+        });
+        inputContainer.appendChild(inputField);
+        this.div.appendChild(inputContainer);
+        }}
+        ]
+      }});
+    
     } else {
       // Dropdown for Price Scale Mode
       const currentMode: PriceScaleMode =

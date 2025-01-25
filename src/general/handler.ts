@@ -230,7 +230,7 @@ export class Handler {
         });
         // Decorate and store info
         const decorated = decorateSeries(candleSeries, this.legend);
-        decorated.applyOptions({ title: "candles" });
+        decorated.applyOptions({ title: "OHLC" });
 
 
         return decorated; // Return the decorated series for further use
@@ -256,7 +256,25 @@ export class Handler {
         name: string,
         options: LineSeriesOptions
     ): { name: string; series: ISeriesApi<SeriesType> } {
-        const { group, legendSymbol = "▨", ...lineOptions } = options;
+
+        const symbol = (() => {
+            switch (options.lineStyle) {
+            case 0:
+            return '―';
+            case 1:
+            return ':··';
+            case 2:
+            return '--';
+            case 3:
+            return '- -';
+            case 4:
+            return '· ·';
+            default:
+            return '~';
+            }
+            })();
+            
+        const { group, legendSymbol = symbol, ...lineOptions } = options;
         const line = this.chart.addLineSeries(lineOptions);
 
         const decorated = decorateSeries(line, this.legend);
@@ -356,7 +374,7 @@ export class Handler {
         name: string,
         options: BarSeriesOptions
     ): { name: string; series: ISeriesApi<SeriesType> } {
-        const { group, legendSymbol = ["▨", "▨"], ...barOptions } = options;
+        const { group, legendSymbol = ['┌', '└'], ...barOptions } = options;
         const bar = this.chart.addBarSeries(barOptions);
 
         const decorated = decorateSeries(bar, this.legend);
