@@ -15,7 +15,7 @@ import {
 
 } from "lightweight-charts";
 import { FillArea } from "../fill-area/fill-area";
-import { GlobalParams, globalParamInit, LegendItem } from "./global-params";
+import { GlobalParams, globalParamInit, LegendItem, LegendPrimitive, LegendSeries } from "./global-params";
 import { Legend } from "./legend";
 import { ToolBox } from "./toolbox";
 import { TopBar } from "./topbar";
@@ -37,6 +37,8 @@ import {
 } from "../helpers/series";
 import { ohlcSeriesOptions, ohlcdefaultOptions, ohlcSeries } from "../ohlc-series/ohlc-series";
 import { TradeSeriesOptions, tradeDefaultOptions, TradeSeries } from "../tx-series/renderer";
+import { TrendTrace } from "../trend-trace/trend-trace";
+import { isISeriesApi } from "../helpers/typeguards";
 
 
 
@@ -116,10 +118,16 @@ export class Handler {
         window.containerDiv.append(this.wrapper)
 
         this.chart = this._createChart();
+        this.ContextMenu = new ContextMenu(
+            this,
+            Handler.handlers, // handlers: Map<string, Handler>
+            () => window.MouseEventParams ?? null // Ensure it returns null if undefined
+        );
+        this.legend = new Legend(this);
+
         this.series = this.createCandlestickSeries();
         this.volumeSeries = this.createVolumeSeries();
         this.series.applyOptions;
-        this.legend = new Legend(this);
         // Inside Handler class constructor
 
         // Setup MouseEventParams tracking
@@ -148,11 +156,7 @@ export class Handler {
         this.chart.subscribeCrosshairMove((param: MouseEventParams) => {
             this.currentMouseEventParams = param;
         });
-        this.ContextMenu = new ContextMenu(
-            this,
-            Handler.handlers, // handlers: Map<string, Handler>
-            () => window.MouseEventParams ?? null // Ensure it returns null if undefined
-        );
+
     }
 
 
@@ -215,6 +219,7 @@ export class Handler {
     }
 
     createCandlestickSeries() {
+        const title = "OHLC" 
         const up = "rgba(39, 157, 130, 100)";
         const down = "rgba(200, 97, 100, 100)";
         const candleSeries = this.chart.addCandlestickSeries({
@@ -230,8 +235,21 @@ export class Handler {
         });
         // Decorate and store info
         const decorated = decorateSeries(candleSeries, this.legend);
-        decorated.applyOptions({ title: "candles" });
+        decorated.applyOptions({title: title});
+        this._seriesList.push(decorated);
+        this.seriesMap.set(title, decorated);
+        const colorsArray = [up, down];
+        const legendSymbol = ['⋰','⋱']
+        const legendItem: LegendItem = {
+            name:title,
+            series: decorated,
+            colors: colorsArray,
+            legendSymbol: legendSymbol,
+            seriesType:"Candlestick",
+            group:undefined,
+        };
 
+        this.legend.addLegendItem(legendItem);
 
         return decorated; // Return the decorated series for further use
     }
@@ -256,7 +274,25 @@ export class Handler {
         name: string,
         options: LineSeriesOptions
     ): { name: string; series: ISeriesApi<SeriesType> } {
-        const { group, legendSymbol = "▨", ...lineOptions } = options;
+
+        const symbol = (() => {
+            switch (options.lineStyle) {
+            case 0:
+            return '―';
+            case 1:
+            return ':··';
+            case 2:
+            return '--';
+            case 3:
+            return '- -';
+            case 4:
+            return '· ·';
+            default:
+            return '~';
+            }
+            })();
+            
+        const { group, legendSymbol = symbol, ...lineOptions } = options;
         const line = this.chart.addLineSeries(lineOptions);
 
         const decorated = decorateSeries(line, this.legend);
@@ -356,7 +392,7 @@ export class Handler {
         name: string,
         options: BarSeriesOptions
     ): { name: string; series: ISeriesApi<SeriesType> } {
-        const { group, legendSymbol = ["▨", "▨"], ...barOptions } = options;
+        const { group, legendSymbol = ['┌', '└'], ...barOptions } = options;
         const bar = this.chart.addBarSeries(barOptions);
 
         const decorated = decorateSeries(bar, this.legend);
@@ -422,17 +458,11 @@ export class Handler {
 
         const colorsArray = [borderUpColor, borderDownColor];
 
-        const legendSymbolsWithGrouping = legendSymbol.map((symbol, index) =>
-            index === legendSymbol.length - 1 && chandelierSize > 1
-                ? `${symbol} (${chandelierSize})`
-                : symbol
-        );
-
         const legendItem: LegendItem = {
             name,
             series: decorated,
             colors: colorsArray,
-            legendSymbol: legendSymbolsWithGrouping,
+            legendSymbol:  Array.isArray(legendSymbol) ? legendSymbol : legendSymbol ? [legendSymbol] : [],
             seriesType,
             group,
         };
@@ -539,7 +569,48 @@ export class Handler {
         // Return the created primitive
         return fillArea;
     }
-
+    ///**
+    // * Creates a TrendTrace between two series.
+    // * 
+    // * @param name - Unique name for the TrendTrace.
+    // * @param origin - Identifier for the origin series.
+    // * @param destination - Identifier for the destination series.
+    // * @param p1 - Starting logical point.
+    // * @param p2 - Ending logical point.
+    // * @param options - Optional TrendTrace options.
+    // * @returns The created TrendTrace instance or undefined.
+    // */
+    //createTrendTrace(
+    //    name: string,
+    //    series: string,
+    //    lineID: string,
+    //    options?: Partial<TrendTraceOptions>
+    //): TrendTrace | undefined {
+    //    // Find origin and destination series by title or identifier
+    //    const source = this._seriesList.find(s => s.options()?.title === series);
+    //    t
+    //    if (!source) {
+    //        console.warn(`Origin series "${source}" not found.`);
+    //        return undefined;
+    //    }
+    //    // Ensure the origin series is extended
+    //    const extendedSeries = ensureExtendedSeries(source, this.legend);
+//
+//
+//
+    //    // Create a new TrendTrace instance
+    //    const trendTrace = new TrendTrace(this, extendedSeries, p1, p2, options);
+//
+    //    // Attach the TrendTrace to the origin series
+    //    extendedSeries.attachPrimitive(trendTrace, name,false,true);
+//
+    //    // Store the TrendTrace instance for future reference
+//
+    //    return trendTrace;
+    //}
+//
+    //// Implement other Handler methods as needed
+//
 
     attachPrimitive(
         lineColor: string,
@@ -576,28 +647,65 @@ export class Handler {
             console.error(`Failed to attach ${primitiveType}:`, error);
         }
     }
+    /**
+     * Removes a series from the chart and updates the legend accordingly.
+     * @param seriesName - The name of the series to remove.
+     */
     removeSeries(seriesName: string): void {
+        // Retrieve the series from the seriesMap using the seriesName
         const series = this.seriesMap.get(seriesName);
-        if (series) {
-            // Remove the series from the chart
-            this.chart.removeSeries(series);
-
-            // Remove from _seriesList
-            this._seriesList = this._seriesList.filter(s => s !== series);
-
-            // Remove from seriesMap
-            this.seriesMap.delete(seriesName);
-
-            // Remove from legend
-            this.legend.deleteLegendEntry(seriesName);
-
-
-
-            console.log(`Series "${seriesName}" removed.`);
-
-
+        if (!series) {
+            console.warn(`Series "${seriesName}" does not exist and cannot be removed.`);
+            return;
         }
+
+        // **1. Detach and Remove Primitives from the Series**
+        if (series.primitives && series.primitives.length > 0) {
+            series.primitives.forEach((primitive: ISeriesPrimitive) => {
+                series.detachPrimitive(primitive);
+                console.log(`Detached primitive from series "${seriesName}".`);
+            });
+        }
+
+    
+        // **3. Update Internal Tracking Structures**
+        // Remove from _seriesList
+        this._seriesList = this._seriesList.filter(s => s !== series);
+        console.log(`Series "${seriesName}" removed from _seriesList.`);
+
+        // Remove from seriesMap
+        this.seriesMap.delete(seriesName);
+        console.log(`Series "${seriesName}" removed from seriesMap.`);
+
+            // Find the legend entry that belongs to this series
+        const legendItem = this.legend._items.find(
+            (item) => (item as LegendSeries).series === series
+        ) as LegendSeries | undefined;
+        if (legendItem) {
+            // **a. Remove Primitives from the Legend**
+            if (legendItem.primitives && legendItem.primitives.length > 0) {
+                legendItem.primitives.forEach((primitive: LegendPrimitive) => {
+                    this.legend.removeLegendPrimitive(primitive);
+                    console.log(`Removed primitive from legend for series "${seriesName}".`);
+                });
+            }
+
+            // **b. Remove the Legend Entry**
+            const group = legendItem.group;
+            
+                this.legend.deleteLegendEntry(legendItem);
+                console.log(`Removed standalone series "${seriesName}" from legend.`);
+            
+        } else {
+            console.warn(`Legend item for series "${seriesName}" not found.`);
+        }
+        this.chart.removeSeries(series);
+    // **2. Remove the Series from the Chart**
+    console.log(`Series "${seriesName}" removed from the chart.`);
+
+        console.log(`Series "${seriesName}" successfully removed.`);
     }
+
 
     createToolBox() {
         this.toolBox = new ToolBox(this, this.id, this.chart, this.series, this.commandFunctions);

@@ -2,6 +2,7 @@
 import { 
     AreaData,
     BarData,
+    CandlestickData,
     HistogramData,
     ISeriesApi,
     ISeriesPrimitive,
@@ -13,7 +14,10 @@ import {
 } from "lightweight-charts";
 import { Handler} from "./handler";
 import { LegendItem, LegendSeries, LegendGroup, openEye, closedEye, LegendPrimitive } from "./global-params";
-import { ISeriesApiExtended } from "../helpers/general";
+import { ISeriesApiExtended } from "../helpers/series";
+import { ContextMenu } from "../context-menu/context-menu";
+import { LegendMenu } from "../context-menu/legend-menu";
+import { isISeriesApi, isLegendPrimitive } from "../helpers/typeguards";
 
 type LegendEntry = LegendSeries | LegendGroup | LegendPrimitive;
 
@@ -21,32 +25,37 @@ type LegendEntry = LegendSeries | LegendGroup | LegendPrimitive;
 const lastSeriesDataCache = new Map<ISeriesApi<SeriesType>, any>();
 
 function getLastData(series: ISeriesApi<SeriesType>) {
-    return lastSeriesDataCache.get(series) || null;
+    return series.data()[series.data().length - 1]
 }
-
 export class Legend {
     private handler: Handler;
     public div: HTMLDivElement;
     public seriesContainer: HTMLDivElement;
+    public legendMenu: LegendMenu;
 
     private ohlcEnabled: boolean = false;
     private percentEnabled: boolean = false;
     private linesEnabled: boolean = false;
     private colorBasedOnCandle: boolean = false;
+    private contextMenu: ContextMenu;
 
     private text: HTMLSpanElement;
-    private candle: HTMLDivElement;
-    private _items: LegendEntry[] = [];
+    public _items: LegendEntry[] = [];
     public _lines: LegendSeries[] = [];
     public _groups: LegendGroup[] = [];
 
-    constructor(handler: Handler) {
+    constructor(handler: Handler) { // Use the Handler interface
         this.handler = handler;
         this.div = document.createElement('div');
         this.div.classList.add("legend");
         this.seriesContainer = document.createElement("div");
         this.text = document.createElement('span');
-        this.candle = document.createElement('div');
+        this.contextMenu = this.handler.ContextMenu
+        // Initialize LegendMenu
+        this.legendMenu = new LegendMenu({
+            contextMenu: this.contextMenu,
+            handler: handler
+        });
 
         this.setupLegend();
         this.legendHandler = this.legendHandler.bind(this);
@@ -66,7 +75,6 @@ export class Legend {
 
         seriesWrapper.appendChild(this.seriesContainer);
         this.div.appendChild(this.text);
-        this.div.appendChild(this.candle);
         this.div.appendChild(seriesWrapper);
         this.handler.div.appendChild(this.div);
     }
@@ -118,10 +126,10 @@ export class Legend {
         }
     }
     public addLegendPrimitive(
-        series:ISeriesApi<SeriesType>| ISeriesApiExtended, 
+        series: ISeriesApi<SeriesType> | ISeriesApiExtended, 
         primitive: ISeriesPrimitive, 
         name?: string
-    ): HTMLDivElement|undefined {
+    ): HTMLDivElement | undefined {
         const primitiveName = name || primitive.constructor.name;
     
         // Check if the parent series row exists
@@ -131,16 +139,21 @@ export class Legend {
             return;
         }
     
+        // Ensure the seriesEntry has a `primitives` array
+        if (!seriesEntry.primitives) {
+            seriesEntry.primitives = [];
+        }
+    
         // Ensure the primitives container exists
         let primitivesContainer = this.seriesContainer.querySelector(
             `[data-series-id="${seriesEntry.name}"] .primitives-container`
         ) as HTMLDivElement;
+        
         if (!primitivesContainer) {
-            // Create a new container for primitives
             primitivesContainer = document.createElement('div');
             primitivesContainer.classList.add('primitives-container');
-            primitivesContainer.style.display = 'none'; // Initially hidden
-            primitivesContainer.style.marginLeft = '20px'; // Indentation for hierarchy
+            primitivesContainer.style.display = 'none'; 
+            primitivesContainer.style.marginLeft = '20px'; 
             primitivesContainer.style.flexDirection = 'column';
     
             // Insert the container below the series row
@@ -184,24 +197,32 @@ export class Legend {
             toggle.innerHTML = ''; // Clear existing content
             toggle.appendChild(visible ? onIcon.cloneNode(true) : offIcon.cloneNode(true));
     
-            // Toggle visibility by updating color options
             this.togglePrimitive(primitive, visible);
         });
     
         // Append elements to the primitive row
         primitiveRow.appendChild(primitiveLabel);
         primitiveRow.appendChild(toggle);
-    
-        // Append the primitive row to the primitives container
         primitivesContainer.appendChild(primitiveRow);
     
-        // Ensure the primitives container is visible if it has content
+        // Ensure the primitives container is visible
         if (primitivesContainer.children.length > 0) {
             primitivesContainer.style.display = 'block';
         }
     
+        // ✅ Store the primitive in `_items`
+        const legendPrimitive: LegendPrimitive = {
+            name: primitiveName,
+            primitive,
+            row: primitiveRow
+        };
+    
+        this._items.push(legendPrimitive);
+        seriesEntry.primitives.push(legendPrimitive); // Track it in the series
+    
         return primitiveRow;
     }
+    
     private togglePrimitive(primitive: ISeriesPrimitive, visible: boolean): void {
         // Check for options in either "options" or "_options"
         const options = (primitive as any).options || (primitive as any)._options;
@@ -261,40 +282,20 @@ export class Legend {
       
       
     
-    
-    public findLegendPrimitive(series: ISeriesApi<SeriesType>, primitive: ISeriesPrimitive): HTMLDivElement | null {
-        const seriesRow = this._lines.find(line => line.series === series)?.row;
-        if (!seriesRow) {
-            return null;
+      public findLegendPrimitive(series: ISeriesApi<SeriesType>, primitive: ISeriesPrimitive): LegendPrimitive | null {
+        // Find the parent series
+        const seriesEntry = this._lines.find(line => line.series === series);
+        if (!seriesEntry || !seriesEntry.primitives) {
+            return null; // No associated series or no primitives exist
         }
     
-        const primitivesContainer = seriesRow.querySelector('.primitives-container');
-        if (!primitivesContainer) {
-            return null;
-        }
+        // Locate the exact primitive inside the series' `primitives` array
+        const legendPrimitive = seriesEntry.primitives.find(
+            (p) => p.primitive === primitive
+        );
     
-        const primitiveType = (primitive.constructor as any).type || primitive.constructor.name;
-        return Array.from(primitivesContainer.children).find(
-            row => row.getAttribute('data-primitive-type') === primitiveType
-        ) as HTMLDivElement | null;
+        return legendPrimitive || null;
     }
-    
-    public removeLegendPrimitive(primitive: ISeriesPrimitive): void {
-        const primitiveName = (primitive.constructor as any).type || primitive.constructor.name;
-        console.log(`Removing legend entry for primitive: ${primitiveName}`);
-    
-        // Iterate through the series container to find and remove the primitive entry
-        const rows = Array.from(this.seriesContainer.children) as HTMLDivElement[];
-        for (const row of rows) {
-            // Check if the row represents the primitive
-            if (row.textContent?.includes(`Primitive: ${primitiveName}`)) {
-                this.seriesContainer.removeChild(row);
-                console.log(`Legend entry for primitive "${primitiveName}" removed.`);
-                break; // Stop once the correct row is found and removed
-            }
-        }
-    }
-    
     
  /**
  * Converts a LegendItem into a LegendSeries.
@@ -363,196 +364,312 @@ private mapToSeries(item: LegendItem): LegendSeries {
             return newGroup.row;
         }
     }
-    makeSeriesRow(line: LegendSeries, container: HTMLDivElement): HTMLDivElement {
-        const row = document.createElement('div');
-        row.classList.add('legend-series-row'); // Add CSS class for styling
-    
-        // Use flexbox for layout
-        row.style.display = 'flex';
-        row.style.alignItems = 'center'; // Vertically center items
-        row.style.justifyContent = 'space-between'; // Add space between text and toggle icon
-        row.style.marginBottom = '4px'; // Optional spacing between rows
-    
-        const div = document.createElement('div');
-        div.classList.add('series-info'); // Add CSS class for styling
-        div.style.flex = '1'; // Allow the text to take up available space
-        const displayOCvalues = ['Bar', 'Candlestick', 'Ohlc'].includes(line.seriesType || '');
+// legend.ts
 
-        if (displayOCvalues) {
-            const openPrice = '-';
-            const closePrice = '-';
-            const upSymbol = line.legendSymbol[0] || '▨';
-            const downSymbol = line.legendSymbol[1] || upSymbol;
-            const upColor = line.colors[0] || '#00FF00';
-            const downColor = line.colors[1] || '#FF0000';
-    
-            div.innerHTML = `
-                <span style="color: ${upColor};">${upSymbol}</span>
-                <span style="color: ${downColor};">${downSymbol}</span>
-                ${line.name}: <span style="color: ${downColor};">O ${openPrice}</span>, 
-                <span style="color: ${upColor};">C ${closePrice}</span>
-            `;
+makeSeriesRow(line: LegendSeries, container: HTMLDivElement): HTMLDivElement {
+    const row = document.createElement('div');
+    row.classList.add('legend-series-row'); // Add CSS class for styling
+
+    // Use flexbox for layout
+    row.style.display = 'flex';
+    row.style.alignItems = 'center'; // Vertically center items
+    row.style.justifyContent = 'space-between'; // Add space between items
+    row.style.marginBottom = '4px'; // Optional spacing between rows
+
+    // **Create Action Button for Series**
+    const actionButton = document.createElement('button');
+    actionButton.classList.add('legend-action-button');
+    actionButton.innerHTML = '◇'; // Default Icon
+    actionButton.title = 'Series Actions'; // Tooltip for accessibility
+    actionButton.style.marginRight = '0px'; // Space between button and info
+    actionButton.style.fontSize = '1em'; // Adjust size as needed
+    actionButton.style.border = 'none'; // Remove default border
+    actionButton.style.background = 'none'; // Remove default background
+    actionButton.style.cursor = 'pointer'; // Indicate it's clickable
+
+    // **Set Action Button Color to Match Series Color**
+    const seriesColor = line.colors[0] || '#000'; // Default to black if no color specified
+    actionButton.style.color = seriesColor;
+
+    // **Attach Click Listener to Action Button**
+    actionButton.addEventListener('click', (event) => {
+        event.stopPropagation(); // Prevent triggering row click events
+        event.preventDefault();  // Prevent default button behavior
+
+        // **Toggle Icon Between ◇ and ◈**
+        if (actionButton.innerHTML === '◇') {
+            actionButton.innerHTML = '◈'; // Menu is open
         } else {
-            div.innerHTML = line.legendSymbol
-                .map((symbol, index) => `<span style="color: ${line.colors[index] || line.colors[0]};">${symbol}</span>`)
-                .join(' ') + ` ${line.name}`;
+            actionButton.innerHTML = '◇'; // Menu is closed
         }
-    
-        // Toggle visibility icon
-        const toggle = document.createElement('div');
-        toggle.classList.add('legend-toggle-switch');
-        toggle.style.cursor = 'pointer'; // Indicate that this is clickable
-    
-        // Use flex styling to keep the toggle inline
-        toggle.style.display = 'flex';
-        toggle.style.alignItems = 'center';
-    
-        const onIcon = this.createSvgIcon(openEye);
-        const offIcon = this.createSvgIcon(closedEye);
-        toggle.appendChild(onIcon.cloneNode(true));
-    
-        let visible = true;
-    
-        // Add click listener for toggling visibility
-        toggle.addEventListener('click', (event) => {
-            visible = !visible;
-            line.series.applyOptions({ visible });
-            toggle.innerHTML = '';
-            toggle.appendChild(visible ? onIcon.cloneNode(true) : offIcon.cloneNode(true));
-    
-            // Update ARIA attribute
-            toggle.setAttribute('aria-pressed', visible.toString());
-    
-            // Update toggle state class
-            toggle.classList.toggle('inactive', !visible);
-    
-            event.stopPropagation();
-        });
-    
-        // Set initial ARIA attributes
-        toggle.setAttribute('role', 'button');
-        toggle.setAttribute('aria-label', `Toggle visibility for ${line.name}`);
-        toggle.setAttribute('aria-pressed', visible.toString());
-    
-        // Append elements to the row
-        row.appendChild(div);    // Add text/info div
-        row.appendChild(toggle); // Add visibility toggle
-    
-        container.appendChild(row); // Append to the provided container
-    
-        // Prevent context menu on the row
-        row.addEventListener('contextmenu', (event) => {
-            event.preventDefault();
-        });
-    
-        // Create LegendSeries and store it
-        const legendSeries: LegendSeries = {
-            ...line,
-            div,     // Assign the created div
-            row,     // Assign the created row
-            toggle,  // Assign the created toggle
-        };
-    
-        this._lines.push(legendSeries);
-        return row;
+
+        // **Populate and Show LegendMenu**
+        this.legendMenu.populateLegendMenu(line, event);
+    });
+
+    // **Create Series Info Div**
+    const div = document.createElement('div');
+    div.classList.add('series-info'); // Add CSS class for styling
+    div.style.flex = '1'; // Allow the text to take up available space
+    const displayOCvalues = ['Bar', 'Candlestick', 'Ohlc'].includes(line.seriesType || '');
+
+    if (displayOCvalues) {
+        const openPrice = '-';
+        const closePrice = '-';
+        const upSymbol = line.legendSymbol[0] || '▨';
+        const downSymbol = line.legendSymbol[1] || upSymbol;
+        const upColor = line.colors[0] || '#00FF00';
+        const downColor = line.colors[1] || '#FF0000';
+
+        div.innerHTML = `
+            <span style="color: ${upColor};">${upSymbol}</span>
+            <span style="color: ${downColor};">${downSymbol}</span>
+            ${line.name}: <span style="color: ${downColor};">O ${openPrice}</span>, 
+            <span style="color: ${upColor};">C ${closePrice}</span>
+        `;
+    } else {
+        div.innerHTML = line.legendSymbol
+            .map((symbol, index) => `<span style="color: ${line.colors[index] || line.colors[0]};">${symbol}</span>`)
+            .join(' ') + ` ${line.name}`;
     }
+
+    // **Toggle Visibility Icon**
+    const toggle = document.createElement('div');
+    toggle.classList.add('legend-toggle-switch');
+    toggle.style.cursor = 'pointer'; // Indicate that this is clickable
+
+    // Use flex styling to keep the toggle inline
+    toggle.style.display = 'flex';
+    toggle.style.alignItems = 'center';
+
+    const onIcon = this.createSvgIcon(openEye);
+    const offIcon = this.createSvgIcon(closedEye);
+    toggle.appendChild(onIcon.cloneNode(true));
+
+    let visible = true;
+
+    // Add click listener for toggling visibility
+    toggle.addEventListener('click', (event) => {
+        visible = !visible;
+        line.series.applyOptions({ visible });
+        toggle.innerHTML = '';
+        toggle.appendChild(visible ? onIcon.cloneNode(true) : offIcon.cloneNode(true));
+
+        // Update ARIA attribute
+        toggle.setAttribute('aria-pressed', visible.toString());
+
+        // Update toggle state class
+        toggle.classList.toggle('inactive', !visible);
+
+        event.stopPropagation();
+    });
+
+    // Set initial ARIA attributes
+    toggle.setAttribute('role', 'button');
+    toggle.setAttribute('aria-label', `Toggle visibility for ${line.name}`);
+    toggle.setAttribute('aria-pressed', visible.toString());
+
+    // **Append Elements to the Row**
+    row.appendChild(actionButton); // Add Action Button
+    row.appendChild(div);          // Add text/info div
+    row.appendChild(toggle);       // Add visibility toggle
+
+    container.appendChild(row); // Append to the provided container
+
+    // **Attach the contextmenu (right-click) listener**
+    row.addEventListener("contextmenu", (event: MouseEvent) => {
+        event.preventDefault(); // Prevent the default browser context menu
+        this.legendMenu.populateLegendMenu(line, event); // Populate and show the legend menu
+    });
+
+    // Create LegendSeries and store it
+    const legendSeries: LegendSeries = {
+        ...line,
+        div,     // Assign the created div
+        row,     // Assign the created row
+        toggle,  // Assign the created toggle
+    };
+
+    this._lines.push(legendSeries);
+    this._items.push(legendSeries);
+    return row;
+}
+
     
     
+      /** Type guard to detect a LegendGroup. */
+      private isLegendGroup(entry: any): entry is LegendGroup {
+        return (entry as LegendGroup).seriesList !== undefined;
+    }
+
+    /** Type guard to detect a LegendSeries. */
+    private isLegendSeries(entry: any): entry is LegendSeries {
+        return (entry as LegendSeries).series !== undefined 
+            || (entry as LegendSeries).primitives !== undefined;
+    }
+
+    /** Type guard to detect a LegendPrimitive. */
+    private isLegendPrimitive(entry: any): entry is LegendPrimitive {
+        return (entry as LegendPrimitive).primitive !== undefined 
+            && (entry as LegendPrimitive).row !== undefined;
+    }
 
     /**
-     * Deletes a legend entry, either a standalone series or an entire group.
-     * @param seriesName The name of the series to delete.
-     * @param groupName The name of the group to delete or from which to delete the series.
+     * Single method to delete any kind of LegendEntry.
+     * Could be a group, a series, or a primitive.
      */
-    deleteLegendEntry(seriesName?: string, groupName?: string): void {
-        if (groupName && !seriesName) {
-            // Remove entire group
-            const groupIndex = this._groups.findIndex(group => group.name === groupName);
-            if (groupIndex !== -1) {
-                const legendGroup = this._groups[groupIndex];
-
-                // Remove the group's DOM elements
-                this.seriesContainer.removeChild(legendGroup.row);
-
-                // Optionally, remove all series in the group from the chart
-                // legendGroup.seriesList.forEach(item => item.series.remove());
-
-                // Remove from the _groups array
-                this._groups.splice(groupIndex, 1);
-
-                // Also remove from _items array
-                this._items = this._items.filter(entry => entry !== legendGroup);
-
-                console.log(`Group "${groupName}" removed.`);
-            } else {
-                console.warn(`Legend group with name "${groupName}" not found.`);
-            }
-        } else if (seriesName) {
-            // Remove individual series
-            let removed = false;
-
-            if (groupName) {
-                // Remove from specific group
-                const group = this._groups.find(g => g.name === groupName);
-                if (group) {
-                    const itemIndex = group.seriesList.findIndex(item => item.name === seriesName);
-                    if (itemIndex !== -1) {
-
-                        // Remove from the group's seriesList
-                        group.seriesList.splice(itemIndex, 1);
-
-                        // If the group is now empty, remove it
-                        if (group.seriesList.length === 0) {
-                            this.seriesContainer.removeChild(group.row);
-                            this._groups = this._groups.filter(g => g !== group);
-                            this._items = this._items.filter(entry => entry !== group);
-                            console.log(`Group "${groupName}" is empty and has been removed.`);
-                        } else {
-                            // Re-render the group to update its display
-                            this.renderGroup(group, this.seriesContainer);
-                        }
-
-                        // Optionally, remove the series from the chart
-                        // seriesItem.series.remove();
-
-                        removed = true;
-                        console.log(`Series "${seriesName}" removed from group "${groupName}".`);
-                    }
-                } else {
-                    console.warn(`Legend group with name "${groupName}" not found.`);
-                }
-            }
-
-            if (!removed) {
-                // Remove from _lines (individual legend items)
-                const seriesIndex = this._lines.findIndex(series => series.name === seriesName);
-                if (seriesIndex !== -1) {
-                    const legendSeries = this._lines[seriesIndex];
-
-                    // Remove the DOM elements
-                    this.seriesContainer.removeChild(legendSeries.row!);
-
-                    // Remove from the _lines array
-                    this._lines.splice(seriesIndex, 1);
-
-                    // Also remove from _items array
-                    this._items = this._items.filter(entry => entry !== legendSeries);
-
-                    // Optionally, remove the series from the chart
-                    // legendSeries.series.remove();
-
-                    removed = true;
-                    console.log(`Series "${seriesName}" removed.`);
-                }
-            }
-
-            if (!removed) {
-                console.warn(`Legend item with name "${seriesName}" not found.`);
-            }
+    public deleteLegendEntry(entry: LegendEntry): void {
+        // Remove from _items first.
+        const indexInItems = this._items.indexOf(entry);
+        if (indexInItems !== -1) {
+            this._items.splice(indexInItems, 1);
         } else {
-            console.warn(`No seriesName or groupName provided for deletion.`);
+            console.warn(`Legend entry "${(entry as any).name}" not found in _items array.`);
+        }
+
+        if (this.isLegendGroup(entry)) {
+            this.removeLegendGroup(entry);
+        } else if (this.isLegendSeries(entry)) {
+            this.removeLegendSeries(entry);
+        } else if (this.isLegendPrimitive(entry)) {
+            this.removeLegendPrimitive(entry);
+        } else {
+            console.warn(`Unknown LegendEntry type for: `, entry);
         }
     }
+
+    /** Removes an entire LegendGroup from the legend. */
+    public removeLegendGroup(group: LegendGroup): void {
+        // Remove from DOM
+        if (this.seriesContainer.contains(group.row)) {
+            this.seriesContainer.removeChild(group.row);
+        }
+
+        // Remove from _groups
+        const gIndex = this._groups.indexOf(group);
+        if (gIndex !== -1) {
+            this._groups.splice(gIndex, 1);
+        }
+
+        // Also remove from _items if needed
+        this._items = this._items.filter(item => item !== group);
+
+        // Potentially remove each series from the group if you want
+        // group.seriesList.forEach( series => { ... } );
+
+        console.log(`Group "${group.name}" removed from legend.`);
+    }
+        /**
+         * Removes a single LegendSeries from the legend.
+         * Can be called with either:
+         * - an `ISeriesApi` (to find and remove its associated `LegendSeries`).
+         * - a `LegendSeries` (to remove it directly).
+         * @param seriesOrLegend - Either an `ISeriesApi` or `LegendSeries`.
+         */
+        public removeLegendSeries(seriesOrLegend: ISeriesApi<SeriesType> | LegendSeries): void {
+            let legendSeries: LegendSeries | undefined;
+
+            if (!isISeriesApi(seriesOrLegend)) {
+                // Case 1: Directly remove the LegendSeries
+                legendSeries = seriesOrLegend;
+            } else {
+                // Case 2: It's an ISeriesApi, so we need to find its corresponding LegendSeries
+                legendSeries = this._items.find(
+                    (item): item is LegendSeries => this.isLegendSeries(item) && item.series === seriesOrLegend
+                );
+            }
+
+            if (!legendSeries) {
+                console.warn("LegendSeries not found in legend.");
+                return;
+            }
+
+            // If the series is part of a group, remove it from the group
+            if (legendSeries.group) {
+                const group = this._groups.find(g => g.name === legendSeries.group);
+                if (group) {
+                    group.seriesList = group.seriesList.filter(item => item !== legendSeries);
+
+                    // If the group is now empty, remove it entirely
+                    if (group.seriesList.length === 0) {
+                        if (this.seriesContainer.contains(group.row)) {
+                            this.seriesContainer.removeChild(group.row);
+                        }
+                        this._groups = this._groups.filter(g => g !== group);
+                        this._items = this._items.filter(item => item !== group);
+                        console.log(`Group "${group.name}" is empty and has been removed.`);
+                    } else {
+                        // Re-render the group if needed
+                        this.renderGroup(group, this.seriesContainer);
+                    }
+                    console.log(`Series "${legendSeries.name}" removed from group "${legendSeries.group}".`);
+                }
+            }
+
+            // Remove from _lines
+            this._lines = this._lines.filter(s => s !== legendSeries);
+
+            // Remove the row from DOM
+            if (this.seriesContainer.contains(legendSeries.row!)) {
+                this.seriesContainer.removeChild(legendSeries.row!);
+            }
+
+            // Remove from _items
+            this._items = this._items.filter(item => item !== legendSeries);
+
+            console.log(`LegendSeries "${legendSeries.name}" removed from legend.`);
+        }
+
+
+public removeLegendPrimitive(primitiveOrLegend: ISeriesPrimitive | LegendPrimitive): void {
+   let legendPrimitive: LegendPrimitive | undefined;
+
+   if (this.isLegendPrimitive(primitiveOrLegend)) {
+       // Case 1: It's already a LegendPrimitive
+       legendPrimitive = primitiveOrLegend;
+   } else {
+       // Case 2: It's an ISeriesPrimitive, find its corresponding LegendPrimitive
+       legendPrimitive = this._items.find(
+           (item): item is LegendPrimitive => 
+               this.isLegendPrimitive(item) && item.primitive === primitiveOrLegend
+       );
+   }
+
+   if (!legendPrimitive) {
+       console.warn("❌ LegendPrimitive not found in legend.");
+       return;
+   }
+
+   // ✅ Ensure the row exists before trying to remove it
+   if (legendPrimitive.row && legendPrimitive.row.parentElement) {
+       legendPrimitive.row.parentElement.removeChild(legendPrimitive.row);
+   } else {
+       console.warn("❌ LegendPrimitive row not found in the DOM.");
+   }
+
+   // ✅ Remove primitive from parent series if applicable
+   const parentSeries = this._lines.find(s => s.primitives?.includes(legendPrimitive));
+   if (parentSeries) {
+       parentSeries.primitives = parentSeries.primitives!.filter(p => p !== legendPrimitive);
+       console.log(`✅ Removed primitive "${legendPrimitive.name}" from series "${parentSeries.name}".`);
+   }
+
+   // ✅ Remove from _items
+   this._items = this._items.filter(item => item !== legendPrimitive);
+
+   // ✅ Ensure the underlying chart primitive is detached
+   if (legendPrimitive.primitive) {
+       try {
+           console.log(`Detaching underlying chart primitive for "${legendPrimitive.name}".`);
+        parentSeries?.series.detachPrimitive(legendPrimitive.primitive
+            
+        )       } catch (error) {
+           console.warn(`⚠️ Failed to detach primitive "${legendPrimitive.name}":`, error);
+       }
+   }
+
+   console.log(`✅ LegendPrimitive "${legendPrimitive.name}" removed from legend.`);
+}
 
     /**
      * Retrieves the group name of a given series.
@@ -669,94 +786,134 @@ private mapToSeries(item: LegendItem): LegendSeries {
         this._items.push(foundSeries);
         console.log(`Series "${seriesName}" moved to group "${targetGroupName}".`);
     }
-    private renderGroup(group: LegendGroup, container: HTMLDivElement): void {
-        // Clear old row content
-        group.row.innerHTML = '';
-        group.row.style.display = 'flex';
-        group.row.style.flexDirection = 'column';
-        group.row.style.width = '100%';
-    
-        // Group header
-        const header = document.createElement('div');
-        header.classList.add('group-header'); // Add CSS class for styling
-        header.style.display = 'flex';        // Set header layout to flex
-        header.style.alignItems = 'center';   // Align items vertically
-        header.style.justifyContent = 'space-between'; // Space between name and toggle icon
-        header.style.cursor = 'pointer';     // Make the header clickable
-    
-        // Group name and aggregated symbols
-        const groupNameSpan = document.createElement('span');
-        groupNameSpan.style.fontWeight = 'bold';
-        groupNameSpan.innerHTML = group.seriesList
-            .map(series => series.legendSymbol.map((symbol, index) =>
-                `<span style="color: ${series.colors[index] || series.colors[0]};">${symbol}</span>`
-            ).join(' '))
-            .join(' ') + ` ${group.name}`;
-    
-        // Custom toggle button (next to the group name)
-        const toggleButton = document.createElement('span');
-        toggleButton.classList.add('toggle-button'); // Add CSS class for styling
-        toggleButton.style.marginLeft = 'auto';      // Push button to the far right
-        toggleButton.style.fontSize = '1.2em';       // Make the icon size consistent
-        toggleButton.style.cursor = 'pointer';       // Indicate it’s clickable
-        toggleButton.innerHTML = '⌲';               // Default expanded state
-        toggleButton.setAttribute('aria-expanded', 'true'); // Accessibility
-    
-        toggleButton.addEventListener('click', (event) => {
-            event.stopPropagation();
-            if (group.div.style.display === 'none') {
-                group.div.style.display = 'block';
-                toggleButton.innerHTML = '⌲'; // Expanded icon
-                toggleButton.setAttribute('aria-expanded', 'true');
-            } else {
-                group.div.style.display = 'none';
-                toggleButton.innerHTML = '☰'; // Collapsed icon
-                toggleButton.setAttribute('aria-expanded', 'false');
-            }
-        });
-    
-        // Add group name and toggle button to the header
-        header.appendChild(groupNameSpan);
-        header.appendChild(toggleButton);
-    
-        // Append header to the group row
-        group.row.appendChild(header);
-    
-        // Container for the group's items (series rows)
-        group.div = document.createElement('div');
-        group.div.style.display = 'block';
-        group.div.style.marginLeft = '10px'; // Indent for group items
-    
-        // Render each series within the group
-        for (const s of group.seriesList) {
-            this.makeSeriesRow(s, group.div);
-            // Each series has its own row appended to group.div
+   // legend.ts
+
+private renderGroup(group: LegendGroup, container: HTMLDivElement): void {
+    // Clear old row content
+    group.row.innerHTML = '';
+    group.row.style.display = 'flex';
+    group.row.style.flexDirection = 'column';
+    group.row.style.width = '100%';
+
+    // **Group Header Setup**
+    const header = document.createElement('div');
+    header.classList.add('group-header'); // Add CSS class for styling
+    header.style.display = 'flex';        // Set header layout to flex
+    header.style.alignItems = 'center';   // Align items vertically
+    header.style.justifyContent = 'space-between'; // Add space between items
+    header.style.cursor = 'pointer';      // Make the header clickable
+
+    // **Create Action Button for Group**
+    const groupActionButton = document.createElement('button');
+    groupActionButton.classList.add('legend-action-button');
+    groupActionButton.innerHTML = '◇'; // Default Icon
+    groupActionButton.title = 'Group Actions'; // Tooltip for accessibility
+    groupActionButton.style.marginRight = '0px'; // Space between button and info
+    groupActionButton.style.fontSize = '1em'; // Adjust size as needed
+    groupActionButton.style.border = 'none'; // Remove default border
+    groupActionButton.style.background = 'none'; // Remove default background
+    groupActionButton.style.cursor = 'pointer'; // Indicate it's clickable
+
+    // **Set Group Action Button Color to Match Group Color**
+    // Use the first series' primary color or default to black
+    const groupColor = group.seriesList[0]?.colors[0] || '#000';
+    groupActionButton.style.color = groupColor;
+
+    // **Attach Click Listener to Group Action Button**
+    groupActionButton.addEventListener('click', (event) => {
+        event.stopPropagation(); // Prevent triggering header click events
+        event.preventDefault();  // Prevent default button behavior
+
+        // **Toggle Icon Between ◇ and ◈**
+        if (groupActionButton.innerHTML === '◇') {
+            groupActionButton.innerHTML = '◈'; // Menu is open
+        } else {
+            groupActionButton.innerHTML = '◇'; // Menu is closed
         }
-    
-        // Render subgroups recursively
-        for (const subG of group.subGroups) {
-            const subContainer = document.createElement('div');
-            subContainer.style.display = 'flex';
-            subContainer.style.flexDirection = 'column';
-            subContainer.style.paddingLeft = '5px'; // Indent for nested groups
-            this.renderGroup(subG, subContainer);
-            group.div.appendChild(subContainer);
+
+        // **Populate and Show LegendMenu**
+        this.legendMenu.populateLegendMenu(group, event);
+    });
+
+    // **Group Name and Aggregated Symbols**
+    const groupNameSpan = document.createElement('span');
+    groupNameSpan.style.fontWeight = 'bold';
+    groupNameSpan.innerHTML = group.seriesList
+        .map(series => series.legendSymbol.map((symbol, index) =>
+            `<span style="color: ${series.colors[index] || series.colors[0]};">${symbol}</span>`
+        ).join(' '))
+        .join(' ') + ` ${group.name}`;
+
+    // **Custom Toggle Button (next to the group name)**
+    const toggleButton = document.createElement('span');
+    toggleButton.classList.add('toggle-button'); // Add CSS class for styling
+    toggleButton.style.marginLeft = 'auto';      // Push button to the far right
+    toggleButton.style.fontSize = '1.2em';       // Make the icon size consistent
+    toggleButton.style.cursor = 'pointer';       // Indicate it’s clickable
+    toggleButton.innerHTML = '⌲';                // Default expanded state
+    toggleButton.setAttribute('aria-expanded', 'true'); // Accessibility
+
+    toggleButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (group.div.style.display === 'none') {
+            group.div.style.display = 'block';
+            toggleButton.innerHTML = '⌲'; // Expanded icon
+            toggleButton.setAttribute('aria-expanded', 'true');
+        } else {
+            group.div.style.display = 'none';
+            toggleButton.innerHTML = '☰'; // Collapsed icon
+            toggleButton.setAttribute('aria-expanded', 'false');
         }
-    
-        // Append the group's items container to the group row
-        group.row.appendChild(group.div);
-    
-        // Append the group row to the container if not already present
-        if (!container.contains(group.row)) {
-            container.appendChild(group.row);
-        }
-    
-        // Prevent context menu on the group row
-        group.row.oncontextmenu = (event) => {
-            event.preventDefault();
-        };
+    });
+
+    // **Append Group Action Button and Group Name to Header**
+    header.appendChild(groupActionButton); // Add Action Button
+    header.appendChild(groupNameSpan);
+    header.appendChild(toggleButton);
+
+    // **Attach context menu listener to the group header**
+    header.addEventListener("contextmenu", (event: MouseEvent) => {
+        event.preventDefault(); // Prevent the default browser context menu
+        this.legendMenu.populateLegendMenu(group, event); // Populate and show the legend menu
+    });
+
+    // **Append Header to the Group Row**
+    group.row.appendChild(header);
+
+    // **Container for the Group's Items (Series Rows)**
+    group.div = document.createElement('div');
+    group.div.style.display = 'block';
+    group.div.style.marginLeft = '10px'; // Indent for group items
+
+    // **Render Each Series within the Group**
+    for (const s of group.seriesList) {
+        this.makeSeriesRow(s, group.div);
     }
-    
+
+    // **Render Subgroups Recursively**
+    for (const subG of group.subGroups) {
+        const subContainer = document.createElement('div');
+        subContainer.style.display = 'flex';
+        subContainer.style.flexDirection = 'column';
+        subContainer.style.paddingLeft = '5px'; // Indent for nested groups
+        this.renderGroup(subG, subContainer);
+        group.div.appendChild(subContainer);
+    }
+
+    // **Append the Group's Items Container to the Group Row**
+    group.row.appendChild(group.div);
+
+    // **Append the Group Row to the Container if Not Already Present**
+    if (!container.contains(group.row)) {
+        container.appendChild(group.row);
+    }
+
+    // **Prevent Default Context Menu on the Group Row**
+    group.row.oncontextmenu = (event) => {
+        event.preventDefault();
+    };
+}
+
     
     /**
      * Handles crosshair movement events to update the legend display.
@@ -764,50 +921,50 @@ private mapToSeries(item: LegendItem): LegendSeries {
      * @param usingPoint Determines whether to use logical indexing.
      */
     public legendHandler(param: MouseEventParams, usingPoint = false) {
-        if (!this.ohlcEnabled && !this.linesEnabled && !this.percentEnabled) return;
-        const options: any = this.handler.series.options()
-
-        if (!param.time) {
-            this.candle.style.color = '#ffffff'
-            this.candle.innerHTML = this.candle.innerHTML.replace(options['upColor'], '').replace(options['downColor'], '')
-            return
-        }
-    
+        //if (!this.ohlcEnabled && !this.linesEnabled && !this.percentEnabled) return;
+        //const options: any = this.handler.series.options()
+//
+        //if (!param.time) {
+        //    this.candle.style.color = '#ffffff'
+        //    this.candle.innerHTML = this.candle.innerHTML.replace(options['upColor'], '').replace(options['downColor'], '')
+        //    return
+        //}
+    //
         let data: any;
         let logical: Logical | null = null;
-    
-        if (usingPoint) {
-            const timeScale = this.handler.chart.timeScale();
-            let coordinate = timeScale.timeToCoordinate(param.time)
-            if (coordinate)
-                logical = timeScale.coordinateToLogical(coordinate.valueOf())
-            if (logical)
-                data = this.handler.series.dataByIndex(logical.valueOf())
-        }
-        else {
-            data = param.seriesData.get(this.handler.series);
-        }
-    
-        this.candle.style.color = ''
-        let str = '<span style="line-height: 1.8;">'
-        if (data) {
-            if (this.ohlcEnabled) {
-                str += `O ${this.legendItemFormat(data.open, this.handler.precision)} `;
-                str += `| H ${this.legendItemFormat(data.high, this.handler.precision)} `;
-                str += `| L ${this.legendItemFormat(data.low, this.handler.precision)} `;
-                str += `| C ${this.legendItemFormat(data.close, this.handler.precision)} `;
-            }
-    
-            // Display percentage move if enabled
-            if (this.percentEnabled) {
-                const percentMove = ((data.close - data.open) / data.open) * 100;
-                const color = percentMove > 0 ? options['upColor'] : options['downColor'];
-                const percentStr = `${percentMove >= 0 ? '+' : ''}${percentMove.toFixed(2)} %`;
-                str += this.colorBasedOnCandle ? `| <span style="color: ${color};">${percentStr}</span>` : `| ${percentStr}`;
-            }
-        }
-    
-        this.candle.innerHTML = str + '</span>';
+    //
+        //if (usingPoint) {
+        //    const timeScale = this.handler.chart.timeScale();
+        //    let coordinate = timeScale.timeToCoordinate(param.time)
+        //    if (coordinate)
+        //        logical = timeScale.coordinateToLogical(coordinate.valueOf())
+        //    if (logical)
+        //        data = this.handler.series.dataByIndex(logical.valueOf())
+        //}
+        //else {
+        //    data = param.seriesData.get(this.handler.series);
+        //}
+    //
+        //this.candle.style.color = ''
+        //let str = '<span style="line-height: 1.8;">'
+        //if (data) {
+        //    if (this.ohlcEnabled) {
+        //        str += `O ${this.legendItemFormat(data.open, this.handler.precision)} `;
+        //        str += `| H ${this.legendItemFormat(data.high, this.handler.precision)} `;
+        //        str += `| L ${this.legendItemFormat(data.low, this.handler.precision)} `;
+        //        str += `| C ${this.legendItemFormat(data.close, this.handler.precision)} `;
+        //    }
+    //
+        //    // Display percentage move if enabled
+        //    if (this.percentEnabled) {
+        //        const percentMove = ((data.close - data.open) / data.open) * 100;
+        //        const color = percentMove > 0 ? options['upColor'] : options['downColor'];
+        //        const percentStr = `${percentMove >= 0 ? '+' : ''}${percentMove.toFixed(2)} %`;
+        //        str += this.colorBasedOnCandle ? `| <span style="color: ${color};">${percentStr}</span>` : `| ${percentStr}`;
+        //    }
+        //}
+    //
+        //this.candle.innerHTML = str + '</span>';
     
         // Update group legend and series legend
         this.updateGroupDisplay(param, logical, usingPoint);
@@ -822,7 +979,6 @@ private mapToSeries(item: LegendItem): LegendSeries {
         this._lines.forEach((e) => {
             const data = param.seriesData.get(e.series) || getLastData(e.series);
             if (!data) {
-                e.div!.innerHTML = `${e.name}: -`;
                 return;
             }
     
@@ -832,7 +988,6 @@ private mapToSeries(item: LegendItem): LegendSeries {
             if (seriesType === 'Line' || seriesType === 'Area') {
                 const valueData = data as LineData | AreaData;
                 if (valueData.value == null) {
-                    e.div!.innerHTML = `${e.name}: -`;
                     return;
                 }
     
@@ -843,7 +998,6 @@ private mapToSeries(item: LegendItem): LegendSeries {
             } else if (seriesType === 'Bar' || seriesType === 'Candlestick' || seriesType === 'Ohlc') {
                 const { open, close } = data as BarData;
                 if (open == null || close == null) {
-                    e.div!.innerHTML = `${e.name}: -`;
                     return;
                 }
     
@@ -881,7 +1035,6 @@ private mapToSeries(item: LegendItem): LegendSeries {
             group.seriesList.forEach((seriesItem: LegendSeries) => {
                 const data = param.seriesData.get(seriesItem.series) || getLastData(seriesItem.series);
                 if (!data) {
-                    seriesItem.div!.innerHTML = `${seriesItem.name}: -`;
                     return;
                 }
             
@@ -894,8 +1047,9 @@ private mapToSeries(item: LegendItem): LegendSeries {
                 if (isOHLC) {
                     const { open, close, high, low } = data as BarData;
                     if (open == null || close == null || high == null || low == null) {
-                        seriesItem.div!.innerHTML = `${name}: -`;
-                        return;
+                        return 
+    
+    
                     }
                 
                     const openPrice = this.legendItemFormat(open, priceFormat.precision);
@@ -915,7 +1069,6 @@ private mapToSeries(item: LegendItem): LegendSeries {
                     const valueData = data as LineData | AreaData | HistogramData;
                     const value = 'value' in valueData ? valueData.value : undefined;
                     if (value == null) {
-                        seriesItem.div!.innerHTML = `${name}: -`;
                         return;
                     }
                 

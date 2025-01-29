@@ -172,13 +172,11 @@ export interface ISeriesApiExtended extends ISeriesApi<SeriesType> {
 
     // Remove the primitive from the legend if it exists
     if (legend) {
-        const legendEntry = legend.findLegendPrimitive(original as ISeriesApi<any>, primitive);
-        if (legendEntry) {
       legend.removeLegendPrimitive(primitive);
           console.log(`Removed primitive of type "${primitive.constructor.name}" from legend.`);
         }
       }
-    }
+    
 
   function detachPrimitives(): void {
     console.log("Detaching all primitives.");

@@ -2,6 +2,7 @@ import { SeriesType, ISeriesApi, AreaData, Background, BarData, CandlestickData,
 import { LegendSeries, LegendPrimitive, LegendGroup, LegendItem } from "../general";
 import { FillArea } from "../fill-area/fill-area";
 import { CandleShape, ohlcSeriesData } from "../ohlc-series/data";
+import { ISeriesApiExtended } from "./series";
 export function isSolidColor(background: Background): background is SolidColor {
   return background.type === ColorType.Solid;
 }
@@ -94,4 +95,14 @@ export function isFillArea(primitive: ISeriesPrimitive | FillArea): primitive is
 
 export function isCandleShape(value: unknown): value is CandleShape {
   return Object.values(CandleShape).includes(value as CandleShape);
+}
+
+
+export function isISeriesApi(series: any): series is ISeriesApi<SeriesType>| ISeriesApiExtended {
+  return (
+    typeof series === "object" &&
+    series !== null &&
+    typeof series.data === "function" &&
+    typeof series.options === "function" 
+  );
 }

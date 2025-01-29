@@ -13,6 +13,8 @@ import {
   SolidColor,
   VerticalGradientColor,
   Background,
+  ISeriesApi,
+  SeriesType,
 } from "lightweight-charts";
 // ----------------------------------
 // Internal Helpers and Types
@@ -73,6 +75,10 @@ import {
 } from "../volume-profile/volume-profile";
 import { defaultSequenceOptions, DataPoint } from "../trend-trace/sequence";
 import { PluginBase } from "../plugin-base";
+import { StopLossTakeProfit } from "../user-lines/trade-lines";
+import { ohlcSeries } from "../ohlc-series/ohlc-series";
+import { setOpacity } from "../helpers/colors";
+
 // ----------------------------------
 // If you have actual code referencing commented-out or removed imports,
 // reintroduce them accordingly.
@@ -375,12 +381,12 @@ export class ContextMenu {
     return null;
   }
 
-  private showMenu(event: MouseEvent): void {
+  public showMenu(event: MouseEvent): void {
     const x = event.clientX;
     const y = event.clientY;
 
     this.div.style.position = "absolute";
-    this.div.style.zIndex = "1000";
+    this.div.style.zIndex = "10000";
     this.div.style.left = `${x}px`;
     this.div.style.top = `${y}px`;
     this.div.style.width = "250px";
@@ -406,7 +412,7 @@ export class ContextMenu {
     }
   }
 
-  private hideMenu() {
+  public hideMenu() {
     this.div.style.display = "none";
     if (activeMenu === this.div) {
       activeMenu = null;
@@ -552,7 +558,7 @@ export class ContextMenu {
         dropdown.style.borderRadius = "4px";
         dropdown.style.minWidth = "100px";
         dropdown.style.boxShadow = "0px 2px 5px rgba(0, 0, 0, 0.5)";
-        dropdown.style.zIndex = "1000";
+        dropdown.style.zIndex = "10000";
         dropdown.style.display = "none";
         hybridContainer.appendChild(dropdown);
 
@@ -743,7 +749,7 @@ export class ContextMenu {
     return container;
   }
 
-  private addMenuItem(
+  public addMenuItem(
     text: string,
     action: () => void,
     shouldHide: boolean = true,
@@ -809,6 +815,8 @@ export class ContextMenu {
     );
     dynamicItems.forEach((item) => item.remove());
     this.items = [];
+    this.div.innerHTML = "";
+
   }
 
   /**
@@ -834,6 +842,41 @@ export class ContextMenu {
       const options = buildOptions(optionPath, newColor);
       optionTarget.applyOptions(options);
       console.log(`Updated ${optionPath} to ${newColor}`);
+      // If optionTarget is a series and the option is color-based, update LegendSeries colors
+      const isSeries = (target: any): target is ISeriesApi<any> => {
+        return (
+          typeof target === "object" &&
+          target !== null &&
+          // Some property check to confirm it's ISeriesApiExtended
+          typeof target.applyOptions === "function" &&
+          typeof target.dataByIndex === "function"
+        );
+      };
+
+      if (
+        isSeries(optionTarget) &&
+        ["color", "lineColor", "upColor", "downColor"].includes(optionPath)
+      ) {
+        // Attempt to find the legend item in the legend _lines array
+        const legendItem = this.handler.legend._lines.find(
+          (item) => item.series === optionTarget
+        );
+
+        if (legendItem) {
+          // Map the relevant color to the correct index
+          // color, lineColor, upColor => index 0
+          // downColor => index 1
+          if (optionPath === "downColor") {
+            legendItem.colors[1] = newColor;
+            console.log(`Legend down color updated to: ${newColor}`);
+          } else {
+            legendItem.colors[0] = newColor;
+            console.log(`Legend up/main color updated to: ${newColor}`);
+          }
+        }
+      }
+
+
     };
 
     menuItem.addEventListener("click", (event: MouseEvent) => {
@@ -873,7 +916,7 @@ export class ContextMenu {
    * @param event - The mouse event triggering the context menu.
    */
 
-  private populateSeriesMenu(
+  public populateSeriesMenu(
     series: ISeriesApiExtended,
     event: MouseEvent
   ): void {
@@ -1051,7 +1094,28 @@ export class ContextMenu {
     // Assign the temp arrays to class-level arrays for use in submenus
     this.currentWidthOptions = tempWidthOptions;
     this.currentStyleOptions = tempStyleOptions;
+    this.addTextInput(
+      "Title",
+      series.options().title || "", // Default to empty string if no title exists
+      (newValue: string) => {
+        const options = { title: newValue };
+                // Remove old entry and re-add with new title
+      if (this.handler.seriesMap.has(series.options().title)) {
+          this.handler.seriesMap.delete(series.options().title);
+        }
+        this.handler.seriesMap.set(newValue, series);
+        console.log(`Updated seriesMap label to: ${newValue}`);
 
+                // Update the legend title
+        const legendItem = this.handler.legend._lines.find(item => item.series === series);
+        if (legendItem && legendItem.series === series) {
+          legendItem.name = newValue;
+          console.log(`Updated legend title to: ${newValue}`);
+        }
+        series.applyOptions(options);
+        console.log(`Updated title to: ${newValue}`);
+      }
+    );
     // Inside populateSeriesMenu (already in your code above)
     this.addMenuItem(
       "Clone Series ▸",
@@ -1627,6 +1691,34 @@ export class ContextMenu {
         true
       );
     }
+    //this.addMenuItem(
+    //  "Stop Loss / Take Profit ▸",
+    //  () => {
+    //      // If not attached yet, attach it
+    //      if (!primitives["StopLossTakeProfit"]) {
+    //          const sltp = new StopLossTakeProfit(
+    //              this.handler.chart,
+    //              series,
+    //              {
+    //                  color: '#444',
+    //                  hoverColor: '#888',
+    //                  backgroundColorStop: 'rgba(255,0,0,0.3)',
+    //                  backgroundColorTarget: 'rgba(0,255,0,0.3)',
+    //                  extendRightBars: 15,
+    //              }
+    //          );
+    //          primitives["StopLossTakeProfit"] = sltp;
+    //          console.log("StopLossTakeProfit attached");
+    //      } else {
+    //          console.log("StopLossTakeProfit already exists, customizing...");
+    //          // If you want to open a submenu to customize,
+    //          // e.g., setStopLoss, setTakeProfit, etc.
+    //      }
+    //  },
+    //  false,
+    //  true
+    //);//
+    
     // Add a Back option
     this.addMenuItem(
       "⤝ Back",
@@ -1639,13 +1731,12 @@ export class ContextMenu {
 
     this.showMenu(event);
   }
-
   private populateStyleMenu(
     event: MouseEvent,
     series: ISeriesApiExtended
   ): void {
     this.div.innerHTML = ""; // Clear the current menu
-
+  
     this.currentStyleOptions.forEach((option) => {
       const predefinedOptions = this.getPredefinedOptions(option.name);
       if (predefinedOptions) {
@@ -1655,13 +1746,13 @@ export class ContextMenu {
           predefinedOptions,
           (newValue: string) => {
             let finalValue: unknown = newValue;
-
+  
             // If the option name indicates it's a line style, map string => numeric
             if (option.name.toLowerCase().includes("style")) {
               const lineStyleMap: Record<string, number> = {
-                Solid: 0,
-                Dotted: 1,
-                Dashed: 2,
+                "Solid": 0,
+                "Dotted": 1,
+                "Dashed": 2,
                 "Large Dashed": 3,
                 "Sparse Dotted": 4,
               };
@@ -1676,21 +1767,52 @@ export class ContextMenu {
               };
               finalValue = lineTypeMap[newValue] ?? 0; // fallback to Simple (0)
             }
-
+  
             // Build the updated options object
             const updatedOptions = buildOptions(option.name, finalValue);
             series.applyOptions(updatedOptions);
-            console.log(
-              `Updated ${option.name} to "${newValue}" =>`,
-              finalValue
-            );
+            console.log(`Updated ${option.name} to "${newValue}" =>`, finalValue);
+  
+            // --- Update the Legend Symbol if it's a lineStyle change on a Line series ---
+            if (
+              option.name.toLowerCase().includes("style") && 
+              series.seriesType() === "Line"
+            ) {
+              // Convert the numeric finalValue into a symbol
+              const lineStyleNumeric = finalValue as number;
+              const symbol = (() => {
+                switch (lineStyleNumeric) {
+                  case 0:
+                    return "―";     // Solid
+                  case 1:
+                    return "··";   // Dotted
+                  case 2:
+                    return "--";    // Dashed
+                  case 3:
+                    return "- -";   // Large Dashed
+                  case 4:
+                    return "· ·";   // Sparse Dotted
+                  default:
+                    return "~";     // Fallback
+                }
+              })();
+  
+              // Find the corresponding legend item in the legend._lines array
+              const legendItem = this.handler.legend._lines.find(
+                (item) => item.series === series
+              );
+              if (legendItem) {
+                legendItem.legendSymbol = [symbol];
+                console.log(`Updated legend symbol for lineStyle(${lineStyleNumeric}) to: ${symbol}`);
+              }
+            }
           }
         );
       } else {
         console.warn(`No predefined options found for "${option.name}".`);
       }
     });
-
+  
     // Add a Back option
     this.addMenuItem(
       "⤝ Back",
@@ -1700,9 +1822,10 @@ export class ContextMenu {
       false,
       false
     );
-
+  
     this.showMenu(event);
   }
+  
 
   private populateCloneSeriesMenu(
     series: ISeriesApiExtended,
@@ -2281,18 +2404,42 @@ export class ContextMenu {
     this.div.innerHTML = ""; // Clear current menu
 
     if (series) {
-      // Option to switch the price scale for the series
-      this.addMenuItem(
-        "Switch Series Price Scale",
-        () => {
-          const newPriceScaleId = priceScaleId === "left" ? "right" : "left";
-          series.applyOptions({ priceScaleId: newPriceScaleId });
-          console.log(`Series price scale switched to: ${newPriceScaleId}`);
-          this.populatePriceScaleMenu(event, newPriceScaleId, series);
+      this.addMenuInput(
+        this.div,
+        {
+        type: "hybrid",
+        label: "Price Scale",
+        value: series.options().priceScaleId || "",
+        onChange: (newValue: string) => {
+        series.applyOptions({ priceScaleId: newValue });
+        console.log(`Updated price scale to: ${newValue}`);
         },
-        false,
-        false
-      );
+        hybridConfig: {
+        defaultAction: () => {
+        const newPriceScaleId = series.options().priceScaleId === "left" ? "right" : "left";
+        series.applyOptions({ priceScaleId: newPriceScaleId });
+        console.log(`Series price scale switched to: ${newPriceScaleId}`);
+        },
+        options: [
+        { name: "Left", action: () => series.applyOptions({ priceScaleId: "left" }) },
+        { name: "Right", action: () => series.applyOptions({ priceScaleId: "right" }) },
+        { name: "Volume", action: () => series.applyOptions({ priceScaleId: "volume_scale" }) },
+        { name: "Custom", action: () => {
+        const inputContainer = document.createElement("div");
+        const inputField = document.createElement("input");
+        inputField.type = "text";
+        inputField.placeholder = "Enter custom scale ID";
+        inputField.value = series.options().priceScaleId || "";
+        inputField.addEventListener("change", () => {
+        series.applyOptions({ priceScaleId: inputField.value });
+        console.log(`Custom scale ID set to: ${inputField.value}`);
+        });
+        inputContainer.appendChild(inputField);
+        this.div.appendChild(inputContainer);
+        }}
+        ]
+      }});
+    
     } else {
       // Dropdown for Price Scale Mode
       const currentMode: PriceScaleMode =
@@ -2613,14 +2760,7 @@ export class ContextMenu {
 
     let seriesOptions: SeriesOption[] = [...mappedSeries];
 
-    // Conditionally add the mainSeries and volumeSeries only if they are valid
-    if (this.handler.series) {
-      const mainSeries: SeriesOption = {
-        label: "Main Series",
-        value: this.handler.series,
-      };
-      seriesOptions = [mainSeries, ...seriesOptions];
-    }
+
 
     if (this.handler.volumeSeries) {
       const volumeSeries: SeriesOption = {
@@ -2799,23 +2939,223 @@ export class ContextMenu {
       false,
       true
     );
+
+
+    this.addMenuItem(
+      "Export Data",
+      () => this.showExportDataDialog(trendTrace),
+      false
+    );
     this.addMenuItem("⤝ Main Menu", () => this.populateChartMenu(event), false);
 
     this.showMenu(event);
   }
   // Define a common interface for an option descriptor.
+// TrendTrace.ts
 
-  /**
-   * Populates the submenu for color options.
-   *
-   * For OHLC data (as determined by isOHLCData), we show OHLC-specific color options;
-   * otherwise, we display a single "Line Color" option.
-   *
-   * This function uses the build-out approach similar to the Time Scale menu.
-   *
-   * @param event - The mouse event that triggered the menu.
-   * @param trendTrace - The TrendTrace instance.
-   */
+private showExportDataDialog(trendTrace: TrendTrace): void {
+  // **Gather the data and options to export**
+  const exportData = {
+    sequence: trendTrace.toJSON(),
+    title: trendTrace.title,
+  };
+
+  const jsonData = JSON.stringify(exportData, null, 2); // Pretty-print with 2-space indentation
+
+  // **Create the modal elements**
+  const modalOverlay = document.createElement("div");
+  modalOverlay.style.position = "fixed";
+  modalOverlay.style.top = "0";
+  modalOverlay.style.left = "0";
+  modalOverlay.style.width = "100%";
+  modalOverlay.style.height = "100%";
+  modalOverlay.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+  modalOverlay.style.display = "flex";
+  modalOverlay.style.justifyContent = "center";
+  modalOverlay.style.alignItems = "center";
+  modalOverlay.style.zIndex = "1000"; // Ensure it's on top
+
+  // **Handle closing the modal with Esc key**
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Escape") {
+      document.body.removeChild(modalOverlay);
+      document.removeEventListener("keydown", handleKeyDown);
+    }
+  };
+  document.addEventListener("keydown", handleKeyDown);
+
+  const modalContent = document.createElement("div");
+  modalContent.style.backgroundColor = "#fff";
+  modalContent.style.padding = "20px";
+  modalContent.style.borderRadius = "8px";
+  modalContent.style.width = "80%";
+  modalContent.style.maxWidth = "800px"; // Increased width for better readability
+  modalContent.style.maxHeight = "90%"; // Allow scrolling if content is too long
+  modalContent.style.overflowY = "auto"; // Enable vertical scrolling
+  modalContent.style.boxShadow = "0 2px 10px rgba(0,0,0,0.1)";
+  modalContent.setAttribute("tabindex", "-1"); // Make div focusable
+  modalContent.focus(); // Focus on the modal for accessibility
+
+  const title = document.createElement("h2");
+  title.textContent = "Export/Import TrendTrace Data";
+  modalContent.appendChild(title);
+
+  const textarea = document.createElement("textarea");
+  textarea.value = jsonData;
+  textarea.style.width = "100%";
+  textarea.style.height = "400px"; // Increased height for better usability
+  textarea.style.marginTop = "10px";
+  textarea.style.marginBottom = "10px";
+  textarea.style.resize = "vertical"; // Allow users to resize vertically
+  textarea.setAttribute("aria-label", "JSON Data Editor"); // Accessibility label
+  modalContent.appendChild(textarea);
+
+  // **Buttons Container**
+  const buttonsContainer = document.createElement("div");
+  buttonsContainer.style.display = "flex";
+  buttonsContainer.style.justifyContent = "flex-end";
+  buttonsContainer.style.gap = "10px";
+
+  // **Apply Changes Button**
+  const applyButton = document.createElement("button");
+  applyButton.textContent = "Apply Changes";
+  applyButton.style.padding = "8px 12px";
+  applyButton.style.cursor = "pointer";
+  applyButton.style.backgroundColor = "#4CAF50"; // Green background
+  applyButton.style.color = "#fff";
+  applyButton.style.border = "none";
+  applyButton.style.borderRadius = "4px";
+  applyButton.onclick = () => {
+    try {
+      const modifiedData = JSON.parse(textarea.value);
+
+      // **Validate the modified data structure**
+      if (
+        typeof modifiedData !== "object" ||
+        !modifiedData.sequence ||
+        !modifiedData.sequence.options ||
+        !Array.isArray(modifiedData.sequence.data)
+      ) {
+        throw new Error("Invalid data structure. Please ensure 'sequence', 'options', and 'data' are present.");
+      }
+
+      // **Optional: Further validation can be added here to check specific fields.**
+
+      // **Apply the new options and data**
+      trendTrace.fromJSON(modifiedData.sequence); // Update the TrendTrace instance
+      trendTrace.updateViewFromSequence(); // Request the TrendTrace to re-render with new data
+
+      this.showNotification("TrendTrace data has been successfully updated.", "success");
+      document.body.removeChild(modalOverlay);
+      document.removeEventListener("keydown", handleKeyDown);
+    } catch (error: any) {
+      this.showNotification("Failed to apply changes: " + error.message, "error");
+    }
+  };
+  buttonsContainer.appendChild(applyButton);
+
+  // **Copy Button**
+  const copyButton = document.createElement("button");
+  copyButton.textContent = "Copy to Clipboard";
+  copyButton.style.padding = "8px 12px";
+  copyButton.style.cursor = "pointer";
+  copyButton.style.backgroundColor = "#008CBA"; // Blue background
+  copyButton.style.color = "#fff";
+  copyButton.style.border = "none";
+  copyButton.style.borderRadius = "4px";
+  copyButton.onclick = () => {
+    navigator.clipboard.writeText(textarea.value).then(
+      () => {
+        this.showNotification("Data copied to clipboard!", "success");
+      },
+      (err) => {
+        this.showNotification("Failed to copy data: " + err, "error");
+      }
+    );
+  };
+  buttonsContainer.appendChild(copyButton);
+
+  // **Download Button**
+  const downloadButton = document.createElement("button");
+  downloadButton.textContent = "Download JSON";
+  downloadButton.style.padding = "8px 12px";
+  downloadButton.style.cursor = "pointer";
+  downloadButton.style.backgroundColor = "#f44336"; // Red background
+  downloadButton.style.color = "#fff";
+  downloadButton.style.border = "none";
+  downloadButton.style.borderRadius = "4px";
+  downloadButton.onclick = () => {
+    try {
+      const blob = new Blob([textarea.value], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "trendtrace_data.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      this.showNotification("Failed to download data: " + error, "error");
+    }
+  };
+  buttonsContainer.appendChild(downloadButton);
+
+  // **Close Button**
+  const closeButton = document.createElement("button");
+  closeButton.textContent = "Close";
+  closeButton.style.padding = "8px 12px";
+  closeButton.style.cursor = "pointer";
+  closeButton.style.backgroundColor = "#555"; // Dark gray background
+  closeButton.style.color = "#fff";
+  closeButton.style.border = "none";
+  closeButton.style.borderRadius = "4px";
+  closeButton.onclick = () => {
+    document.body.removeChild(modalOverlay);
+    document.removeEventListener("keydown", handleKeyDown);
+  };
+  buttonsContainer.appendChild(closeButton);
+
+  modalContent.appendChild(buttonsContainer);
+  modalOverlay.appendChild(modalContent);
+  document.body.appendChild(modalOverlay);
+}
+
+/**
+ * Displays a notification message to the user.
+ *
+ * @param message - The message to display.
+ * @param type - The type of message ('success' or 'error').
+ */
+private showNotification(message: string, type: "success" | "error"): void {
+  const notification = document.createElement("div");
+  notification.textContent = message;
+  notification.style.position = "fixed";
+  notification.style.bottom = "20px";
+  notification.style.right = "20px";
+  notification.style.padding = "10px 20px";
+  notification.style.borderRadius = "4px";
+  notification.style.color = "#fff";
+  notification.style.backgroundColor = type === "success" ? "#4CAF50" : "#f44336";
+  notification.style.boxShadow = "0 2px 6px rgba(0,0,0,0.2)";
+  notification.style.zIndex = "1001";
+  notification.style.opacity = "0";
+  notification.style.transition = "opacity 0.5s ease-in-out";
+  document.body.appendChild(notification);
+  
+  // Fade in
+  setTimeout(() => {
+    notification.style.opacity = "1";
+  }, 100);
+  
+  // Remove after 3 seconds
+  setTimeout(() => {
+    notification.style.opacity = "0";
+    setTimeout(() => {
+      document.body.removeChild(notification);
+    }, 500);
+  }, 3000);
+}
+
+
   private populateTrendColorMenu(
     event: MouseEvent,
     trendTrace: TrendTrace
