@@ -77,10 +77,10 @@ export class TrendTrace extends PluginBase implements ISeriesPrimitive<Time> {
   _state: InteractionState = InteractionState.NONE;
   _handler: Handler;
   _source: ISeriesApiExtended;
-  _originalP1: LogicalPoint;
-  _originalP2: LogicalPoint;
-  p1: LogicalPoint;
-  p2: LogicalPoint;
+  _originalP1: LogicalPoint | null  = null ;
+  _originalP2: LogicalPoint | null  = null ;
+  p1: LogicalPoint | null  = null ;
+  p2: LogicalPoint | null  = null ;
   protected _points: (Point | null)[] = [];
   public title: string = "";
 
@@ -132,7 +132,7 @@ export class TrendTrace extends PluginBase implements ISeriesPrimitive<Time> {
     };
 
     // Create and store the sequence
-    this._sequence = this._createSequence(p1, p2);
+    this._sequence = this._createSequence({p1, p2});
     this.p1 = this._sequence.p1;
     this.p2 = this._sequence.p2;
     // Initialize pane views
@@ -141,10 +141,38 @@ export class TrendTrace extends PluginBase implements ISeriesPrimitive<Time> {
     this._subscribeEvents();
     this._paneViews = [new TrendTracePaneView(this)];
   }
+      /**
+       * Serializes the Sequence instance to a JSON object.
+       *
+       * @returns An object representing the Sequence data and options.
+       */
+      public toJSON(): object {
+        return {
+        data: this._sequence.data,
+        p1: this._sequence._originalP1,
+        p2: this._sequence._originalP2,
+        options: this._sequence._options,
+        };
+    }
+
+    /**
+     * Deserializes a JSON object to create a new Sequence instance.
+     *
+     * @param json - The JSON object containing Sequence data and options.
+     * @param handler - The handler instance required by the Sequence constructor.
+     * @param source - The ISeriesApiExtended instance required by the Sequence constructor.
+     * @returns A new Sequence instance populated with the provided data.
+     */
+    public  fromJSON(
+        json: { data: DataPoint[]; p1: LogicalPoint; p2: LogicalPoint, options: SequenceOptions}):void  { 
+         this._sequence.setData(json.data)
+         this.applyOptions(json.options)
+    }
 
   attached(params: SeriesAttachedParameter): SeriesAttachedParameter {
     super.attached(params);
-    this._createSequence(this._originalP1, this._originalP2);
+    if (this._originalP1 && this._originalP2){
+    this._createSequence({p1:this._originalP1, p2:this._originalP2});}
     this._source = ensureExtendedSeries(params.series, this._handler.legend);
     this.title = params.series.options().title;
     return {
@@ -160,21 +188,64 @@ export class TrendTrace extends PluginBase implements ISeriesPrimitive<Time> {
 
   detached(): void {
     super.detached();
-    this._paneViews = [];
-  }
 
-  private _createSequence(p1: LogicalPoint, p2: LogicalPoint): Sequence {
-    const sequence = new Sequence(
-      this._handler,
-      this._source,
-      p1,
-      p2,
-      this._options,
-      undefined
-    );
-    sequence.onComplete = () => this.updateViewFromSequence();
-    this.updateViewFromSequence();
-    return sequence;
+    // Clear all event listeners
+    this._listeners.forEach(({ name, listener }) => {
+        document.body.removeEventListener(name, listener);
+    });
+
+    // Reset the listeners array
+    this._listeners = [];
+
+    // Unsubscribe from chart events
+    if (this._handler?.chart) {
+        this._handler.chart.unsubscribeCrosshairMove(this._handleMouseMove);
+        this._handler.chart.unsubscribeClick(this._handleMouseDownOrUp);
+    }
+
+    // Clear references
+    this._paneViews = [];
+    this._sequence = null!;
+    this._options = null!;
+    this._source = null!;
+    this._originalP1 = null;
+    this._originalP2 = null;
+    this.p1 = null;
+    this.p2 = null;
+
+    console.log("✅ All listeners and references successfully detached.");
+}
+
+  private _createSequence(
+    source: { p1: LogicalPoint; p2: LogicalPoint } | { data: Sequence },
+    options?: SequenceOptions
+): Sequence{   
+    let sequence: Sequence;
+
+    if ('p1' in source && 'p2' in source) {
+        sequence = new Sequence(
+            this._handler,
+            this._source,
+            source.p1,
+            source.p2,
+            options ?? this._options,
+        );
+        sequence.onComplete = () => this.updateViewFromSequence();
+        this.updateViewFromSequence();
+        return sequence;
+    } else  {
+        sequence = new Sequence(
+            this._handler,
+            source.data,
+            source.data._originalP1,
+            source.data._originalP2,
+            options??this._options
+        );
+        sequence.onComplete = () => this.updateViewFromSequence();
+        this.updateViewFromSequence();
+        return sequence;
+    } 
+
   }
   public applyOptions(
     options: Partial<SequenceOptions>,
@@ -666,8 +737,8 @@ export class TrendTracePaneRenderer
             // Include all required properties in the returned object
             return {
               ...bar,
-              scaledX1,
-              scaledX2,
+              scaledX1:inverted?scaledX1:scaledX2,
+              scaledX2:inverted?scaledX2:scaledX1,
               color,
               borderColor,
               wickColor,
@@ -788,27 +859,33 @@ export class TrendTracePaneRenderer
         this._source._sequence.p2.price < this._source._sequence.p1.price);
     bars.forEach((bar) => {
       const scaledX = bar.scaledX1 + (bar.scaledX2 + 1 - bar.scaledX1) / 2;
-      const scaledHigh =
+      //const scaledHigh =
+      //  (this._source.series.priceToCoordinate( (inverted? bar.high??0:bar.low??0)) ?? 0) *
+      //  verticalPixelRatio;
+      //const scaledLow =
+      //  (this._source.series.priceToCoordinate((inverted?bar.low??0:bar.high??0)) ?? 0) *
+      //  verticalPixelRatio;
+        const scaledHigh =
         (this._source.series.priceToCoordinate(bar.high ?? 0) ?? 0) *
         verticalPixelRatio;
       const scaledLow =
         (this._source.series.priceToCoordinate(bar.low ?? 0) ?? 0) *
         verticalPixelRatio;
-
       // Calculate the top and bottom parts of the wick based on max(open, close) and min(open, close)
       const scaledOpen =
-        (this._source.series.priceToCoordinate(bar.open ?? 0) ?? 0) *
+        (this._source.series.priceToCoordinate(bar.open ?? 0)??0) *
         verticalPixelRatio;
       const scaledClose =
-        (this._source.series.priceToCoordinate(bar.close ?? 0) ?? 0) *
+        (this._source.series.priceToCoordinate(bar.close ?? 0 )??0) *
         verticalPixelRatio;
-      const topWick = inverted
-        ? Math.min(scaledOpen, scaledClose)
-        : Math.max(scaledOpen, scaledClose);
-      const bottomWick = inverted
-        ? Math.max(scaledOpen, scaledClose)
-        : Math.min(scaledOpen, scaledClose);
-
+      //const topWick = inverted
+      //  ? Math.min(scaledOpen, scaledClose)
+      //  : Math.max(scaledOpen, scaledClose);
+      //const bottomWick = inverted
+      //  ? Math.max(scaledOpen, scaledClose)
+      //  : Math.min(scaledOpen, scaledClose);
+      const topWick = inverted?Math.min(scaledOpen,scaledClose):Math.max(scaledOpen, scaledClose)
+      const bottomWick =inverted?Math.max(scaledOpen,scaledClose):Math.min(scaledOpen, scaledClose) 
       ctx.strokeStyle = this._options.visible
         ? bar.wickColor ?? "#ffffff"
         : "rgba(0,0,0,0)";

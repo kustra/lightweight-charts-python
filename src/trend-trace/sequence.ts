@@ -5,6 +5,7 @@ import { setOpacity } from "../helpers/colors";
 import { ISeriesApiExtended } from "../helpers/series";
 import { CandleShape, parseCandleShape } from "../ohlc-series/data";
 import { Point as LogicalPoint } from '../drawing/data-source';
+import { isISeriesApi } from "../helpers/typeguards";
 
 export interface Scale {
     x: number;
@@ -85,7 +86,7 @@ export interface SequenceOptions extends DrawingOptions {
 }
 export const defaultSequenceOptions: SequenceOptions = {
     visible: true,
-    autoScale: true,
+    autoScale: false,
     xScaleLock:false,
     yScaleLock:false,
     color: '#737375',
@@ -122,7 +123,9 @@ export class Sequence {
     public get data(): DataPoint[] {
         return this.convertAndAggregateDataPoints();
     }
-
+    public get sourceData(): DataPoint[] {
+        return this._originalData;
+    }
     public _originalP1: LogicalPoint;
     public _originalP2: LogicalPoint;
     public _barWidth: number = 0.8;
@@ -149,11 +152,10 @@ export class Sequence {
     };
     constructor(
         public handler: Handler,
-        series: ISeriesApiExtended,
+        series: ISeriesApiExtended|Sequence,
         p1: LogicalPoint,
         p2: LogicalPoint,
         options: SequenceOptions,
-        sequence?: Sequence,
     ) {
         this._options = { ...options, ...defaultSequenceOptions };
         let left: LogicalPoint, right:LogicalPoint
@@ -172,19 +174,19 @@ export class Sequence {
         this.p1 = p1;
         this.p2 = p2;
 
-
-        this.series = series || this.handler.series || this.handler._seriesList[0];
-
-        if (sequence){
-            this._originalData = sequence._originalData
-        }
-        else{		
-            
+        if (isISeriesApi(series)) {
+        this.series = series 
         this._originalData = this.series.data().map((data, index) => ({
             ...data,
             x1: index,
             x2: index
-        }))};
+        }))
+        } else {
+            this.series =  this.handler.series || this.handler._seriesList[0];
+            this._originalData = series._originalData 
+        }
+
+ 
         /**
          * We find the min and max of the original points' logical indexes
          * and slice the data range. We store that in _originalData so subsequent
@@ -202,7 +204,9 @@ export class Sequence {
             this.setPoints(this.p1, this.p2);
         }
     }
-
+    public setData(data:DataPoint[]){
+        this._originalSlice = data 
+    }
     public setPoints(p1: LogicalPoint, p2: LogicalPoint): void {
         let left: LogicalPoint, right:LogicalPoint
         if (Math.min(p1.logical,p2.logical) === p1.logical){
@@ -278,16 +282,17 @@ export class Sequence {
             this.transform.scale.y = scaleY
         }
 
-    // Dynamically adjust chandelierSize based on the scaleX factor
-    if (scaleX < 1 && this._options.autoScale) {
-        this._options.chandelierSize = Math.ceil(1 / scaleX);
-    } 
+
+    if (this._options.autoScale) {
+        if (scaleX > -1 && scaleX < 1) {
+            this._options.chandelierSize = Math.abs(Math.ceil(1 / scaleX));
+    } }
 
 
     const spatial: Spatial = {
         scale: {
-            x: this.transform.scale.x !== 0 ? Math.round(scaleX * 100) / 100 : 1,
-            y: this.transform.scale.y !== 0 ? Math.round(scaleY * 100) / 100 : 1
+            x: scaleX !== 0 ? Math.round(scaleX * 100) / 100 : 1,
+            y: scaleY !== 0 ? Math.round(scaleY * 100) / 100 : 1
         },
         shift: {
             x: this._originalP1.logical - this.p1.logical,
@@ -554,4 +559,12 @@ export class Sequence {
             };
             this.processSequence()
         }
+
+
+
 }
+
+
+
+
+

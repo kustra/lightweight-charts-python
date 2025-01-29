@@ -3,6 +3,7 @@ import { DrawingOptions, defaultOptions } from './options';
 import { Drawing } from './drawing';
 import { TwoPointDrawingPaneView } from './pane-view';
 import { PluginBase } from '../plugin-base';
+import { ensureExtendedSeries, ISeriesApiExtended } from '../helpers/series';
 
 
 export abstract class TwoPointDrawing extends Drawing {
@@ -36,7 +37,8 @@ export abstract class TwoPointDrawing extends Drawing {
         this.linkedObjects.forEach((primitive:PluginBase) => {
             const series = primitive.series
             if (series){
-            series.detachPrimitive(primitive) 
+            (series as ISeriesApiExtended).detachPrimitive(primitive)
+            
             }
         });
         this.linkedObjects = [];  // Clear linked objects after detaching

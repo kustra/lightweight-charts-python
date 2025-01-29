@@ -78,6 +78,7 @@ import { PluginBase } from "../plugin-base";
 import { StopLossTakeProfit } from "../user-lines/trade-lines";
 import { ohlcSeries } from "../ohlc-series/ohlc-series";
 import { setOpacity } from "../helpers/colors";
+
 // ----------------------------------
 // If you have actual code referencing commented-out or removed imports,
 // reintroduce them accordingly.
@@ -380,12 +381,12 @@ export class ContextMenu {
     return null;
   }
 
-  private showMenu(event: MouseEvent): void {
+  public showMenu(event: MouseEvent): void {
     const x = event.clientX;
     const y = event.clientY;
 
     this.div.style.position = "absolute";
-    this.div.style.zIndex = "1000";
+    this.div.style.zIndex = "10000";
     this.div.style.left = `${x}px`;
     this.div.style.top = `${y}px`;
     this.div.style.width = "250px";
@@ -411,7 +412,7 @@ export class ContextMenu {
     }
   }
 
-  private hideMenu() {
+  public hideMenu() {
     this.div.style.display = "none";
     if (activeMenu === this.div) {
       activeMenu = null;
@@ -557,7 +558,7 @@ export class ContextMenu {
         dropdown.style.borderRadius = "4px";
         dropdown.style.minWidth = "100px";
         dropdown.style.boxShadow = "0px 2px 5px rgba(0, 0, 0, 0.5)";
-        dropdown.style.zIndex = "1000";
+        dropdown.style.zIndex = "10000";
         dropdown.style.display = "none";
         hybridContainer.appendChild(dropdown);
 
@@ -748,7 +749,7 @@ export class ContextMenu {
     return container;
   }
 
-  private addMenuItem(
+  public addMenuItem(
     text: string,
     action: () => void,
     shouldHide: boolean = true,
@@ -814,6 +815,8 @@ export class ContextMenu {
     );
     dynamicItems.forEach((item) => item.remove());
     this.items = [];
+    this.div.innerHTML = "";
+
   }
 
   /**
@@ -913,7 +916,7 @@ export class ContextMenu {
    * @param event - The mouse event triggering the context menu.
    */
 
-  private populateSeriesMenu(
+  public populateSeriesMenu(
     series: ISeriesApiExtended,
     event: MouseEvent
   ): void {
@@ -2757,14 +2760,7 @@ export class ContextMenu {
 
     let seriesOptions: SeriesOption[] = [...mappedSeries];
 
-    // Conditionally add the mainSeries and volumeSeries only if they are valid
-    if (this.handler.series) {
-      const mainSeries: SeriesOption = {
-        label: "Main Series",
-        value: this.handler.series,
-      };
-      seriesOptions = [mainSeries, ...seriesOptions];
-    }
+
 
     if (this.handler.volumeSeries) {
       const volumeSeries: SeriesOption = {
@@ -2943,23 +2939,223 @@ export class ContextMenu {
       false,
       true
     );
+
+
+    this.addMenuItem(
+      "Export Data",
+      () => this.showExportDataDialog(trendTrace),
+      false
+    );
     this.addMenuItem("⤝ Main Menu", () => this.populateChartMenu(event), false);
 
     this.showMenu(event);
   }
   // Define a common interface for an option descriptor.
+// TrendTrace.ts
 
-  /**
-   * Populates the submenu for color options.
-   *
-   * For OHLC data (as determined by isOHLCData), we show OHLC-specific color options;
-   * otherwise, we display a single "Line Color" option.
-   *
-   * This function uses the build-out approach similar to the Time Scale menu.
-   *
-   * @param event - The mouse event that triggered the menu.
-   * @param trendTrace - The TrendTrace instance.
-   */
+private showExportDataDialog(trendTrace: TrendTrace): void {
+  // **Gather the data and options to export**
+  const exportData = {
+    sequence: trendTrace.toJSON(),
+    title: trendTrace.title,
+  };
+
+  const jsonData = JSON.stringify(exportData, null, 2); // Pretty-print with 2-space indentation
+
+  // **Create the modal elements**
+  const modalOverlay = document.createElement("div");
+  modalOverlay.style.position = "fixed";
+  modalOverlay.style.top = "0";
+  modalOverlay.style.left = "0";
+  modalOverlay.style.width = "100%";
+  modalOverlay.style.height = "100%";
+  modalOverlay.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+  modalOverlay.style.display = "flex";
+  modalOverlay.style.justifyContent = "center";
+  modalOverlay.style.alignItems = "center";
+  modalOverlay.style.zIndex = "1000"; // Ensure it's on top
+
+  // **Handle closing the modal with Esc key**
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Escape") {
+      document.body.removeChild(modalOverlay);
+      document.removeEventListener("keydown", handleKeyDown);
+    }
+  };
+  document.addEventListener("keydown", handleKeyDown);
+
+  const modalContent = document.createElement("div");
+  modalContent.style.backgroundColor = "#fff";
+  modalContent.style.padding = "20px";
+  modalContent.style.borderRadius = "8px";
+  modalContent.style.width = "80%";
+  modalContent.style.maxWidth = "800px"; // Increased width for better readability
+  modalContent.style.maxHeight = "90%"; // Allow scrolling if content is too long
+  modalContent.style.overflowY = "auto"; // Enable vertical scrolling
+  modalContent.style.boxShadow = "0 2px 10px rgba(0,0,0,0.1)";
+  modalContent.setAttribute("tabindex", "-1"); // Make div focusable
+  modalContent.focus(); // Focus on the modal for accessibility
+
+  const title = document.createElement("h2");
+  title.textContent = "Export/Import TrendTrace Data";
+  modalContent.appendChild(title);
+
+  const textarea = document.createElement("textarea");
+  textarea.value = jsonData;
+  textarea.style.width = "100%";
+  textarea.style.height = "400px"; // Increased height for better usability
+  textarea.style.marginTop = "10px";
+  textarea.style.marginBottom = "10px";
+  textarea.style.resize = "vertical"; // Allow users to resize vertically
+  textarea.setAttribute("aria-label", "JSON Data Editor"); // Accessibility label
+  modalContent.appendChild(textarea);
+
+  // **Buttons Container**
+  const buttonsContainer = document.createElement("div");
+  buttonsContainer.style.display = "flex";
+  buttonsContainer.style.justifyContent = "flex-end";
+  buttonsContainer.style.gap = "10px";
+
+  // **Apply Changes Button**
+  const applyButton = document.createElement("button");
+  applyButton.textContent = "Apply Changes";
+  applyButton.style.padding = "8px 12px";
+  applyButton.style.cursor = "pointer";
+  applyButton.style.backgroundColor = "#4CAF50"; // Green background
+  applyButton.style.color = "#fff";
+  applyButton.style.border = "none";
+  applyButton.style.borderRadius = "4px";
+  applyButton.onclick = () => {
+    try {
+      const modifiedData = JSON.parse(textarea.value);
+
+      // **Validate the modified data structure**
+      if (
+        typeof modifiedData !== "object" ||
+        !modifiedData.sequence ||
+        !modifiedData.sequence.options ||
+        !Array.isArray(modifiedData.sequence.data)
+      ) {
+        throw new Error("Invalid data structure. Please ensure 'sequence', 'options', and 'data' are present.");
+      }
+
+      // **Optional: Further validation can be added here to check specific fields.**
+
+      // **Apply the new options and data**
+      trendTrace.fromJSON(modifiedData.sequence); // Update the TrendTrace instance
+      trendTrace.updateViewFromSequence(); // Request the TrendTrace to re-render with new data
+
+      this.showNotification("TrendTrace data has been successfully updated.", "success");
+      document.body.removeChild(modalOverlay);
+      document.removeEventListener("keydown", handleKeyDown);
+    } catch (error: any) {
+      this.showNotification("Failed to apply changes: " + error.message, "error");
+    }
+  };
+  buttonsContainer.appendChild(applyButton);
+
+  // **Copy Button**
+  const copyButton = document.createElement("button");
+  copyButton.textContent = "Copy to Clipboard";
+  copyButton.style.padding = "8px 12px";
+  copyButton.style.cursor = "pointer";
+  copyButton.style.backgroundColor = "#008CBA"; // Blue background
+  copyButton.style.color = "#fff";
+  copyButton.style.border = "none";
+  copyButton.style.borderRadius = "4px";
+  copyButton.onclick = () => {
+    navigator.clipboard.writeText(textarea.value).then(
+      () => {
+        this.showNotification("Data copied to clipboard!", "success");
+      },
+      (err) => {
+        this.showNotification("Failed to copy data: " + err, "error");
+      }
+    );
+  };
+  buttonsContainer.appendChild(copyButton);
+
+  // **Download Button**
+  const downloadButton = document.createElement("button");
+  downloadButton.textContent = "Download JSON";
+  downloadButton.style.padding = "8px 12px";
+  downloadButton.style.cursor = "pointer";
+  downloadButton.style.backgroundColor = "#f44336"; // Red background
+  downloadButton.style.color = "#fff";
+  downloadButton.style.border = "none";
+  downloadButton.style.borderRadius = "4px";
+  downloadButton.onclick = () => {
+    try {
+      const blob = new Blob([textarea.value], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "trendtrace_data.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      this.showNotification("Failed to download data: " + error, "error");
+    }
+  };
+  buttonsContainer.appendChild(downloadButton);
+
+  // **Close Button**
+  const closeButton = document.createElement("button");
+  closeButton.textContent = "Close";
+  closeButton.style.padding = "8px 12px";
+  closeButton.style.cursor = "pointer";
+  closeButton.style.backgroundColor = "#555"; // Dark gray background
+  closeButton.style.color = "#fff";
+  closeButton.style.border = "none";
+  closeButton.style.borderRadius = "4px";
+  closeButton.onclick = () => {
+    document.body.removeChild(modalOverlay);
+    document.removeEventListener("keydown", handleKeyDown);
+  };
+  buttonsContainer.appendChild(closeButton);
+
+  modalContent.appendChild(buttonsContainer);
+  modalOverlay.appendChild(modalContent);
+  document.body.appendChild(modalOverlay);
+}
+
+/**
+ * Displays a notification message to the user.
+ *
+ * @param message - The message to display.
+ * @param type - The type of message ('success' or 'error').
+ */
+private showNotification(message: string, type: "success" | "error"): void {
+  const notification = document.createElement("div");
+  notification.textContent = message;
+  notification.style.position = "fixed";
+  notification.style.bottom = "20px";
+  notification.style.right = "20px";
+  notification.style.padding = "10px 20px";
+  notification.style.borderRadius = "4px";
+  notification.style.color = "#fff";
+  notification.style.backgroundColor = type === "success" ? "#4CAF50" : "#f44336";
+  notification.style.boxShadow = "0 2px 6px rgba(0,0,0,0.2)";
+  notification.style.zIndex = "1001";
+  notification.style.opacity = "0";
+  notification.style.transition = "opacity 0.5s ease-in-out";
+  document.body.appendChild(notification);
+  
+  // Fade in
+  setTimeout(() => {
+    notification.style.opacity = "1";
+  }, 100);
+  
+  // Remove after 3 seconds
+  setTimeout(() => {
+    notification.style.opacity = "0";
+    setTimeout(() => {
+      document.body.removeChild(notification);
+    }, 500);
+  }, 3000);
+}
+
+
   private populateTrendColorMenu(
     event: MouseEvent,
     trendTrace: TrendTrace
