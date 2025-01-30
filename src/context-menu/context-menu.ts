@@ -14,23 +14,27 @@ import {
   VerticalGradientColor,
   Background,
   ISeriesApi,
-  SeriesType,
 } from "lightweight-charts";
 // ----------------------------------
 // Internal Helpers and Types
 // ----------------------------------
 import {
   cloneSeriesAsType,
+  decorateSeriesAsIndicator,
   ensureExtendedSeries,
+  ISeriesIndicator,
+  recalculateIndicator,
   SupportedSeriesType,
 } from "../helpers/series";
 import {
   isCandleShape,
   isFillArea,
+  isISeriesIndicator,
   isOHLCData,
   isSingleValueData,
   isSolidColor,
   isVerticalGradientColor,
+  isWhitespaceData,
 } from "../helpers/typeguards";
 import {
   AreaSeriesOptions,
@@ -75,9 +79,9 @@ import {
 } from "../volume-profile/volume-profile";
 import { defaultSequenceOptions, DataPoint } from "../trend-trace/sequence";
 import { PluginBase } from "../plugin-base";
-import { StopLossTakeProfit } from "../user-lines/trade-lines";
-import { ohlcSeries } from "../ohlc-series/ohlc-series";
-import { setOpacity } from "../helpers/colors";
+
+import { generateShades, setOpacity } from "../helpers/colors";
+import { ALL_INDICATORS, IndicatorDefinition } from "../indicators/indicators";
 
 // ----------------------------------
 // If you have actual code referencing commented-out or removed imports,
@@ -1299,7 +1303,39 @@ export class ContextMenu {
       false,
       true
     );
+    const data = series.data(); 
+    // Assuming you already have `isOHLCData(...)` or something similar
+    const hasOhlc = Array.isArray(data) && data.every(d => isOHLCData(d));
+  
+    if (hasOhlc) {
+      // 2) If all items are OHLC, add a submenu item for your “Indicators”
+      this.addMenuItem(
+        "Indicators ▸",
+        () => {
+          // Here you’d call your “populateIndicatorMenu” or “showIndicatorModal” or 
+          // whichever method lists available indicators and applies them
+          this.populateIndicatorMenu((series as ISeriesApi<"Candlestick"|"Bar">) ,event);
+        },
+        false, // do not hide the entire menu automatically
+        true   // indicates a submenu arrow “▸”
+      );
+    }
 
+  // Check if this series is part of an indicator
+  if (isISeriesIndicator(series)) {
+    
+    const indicatorSeries = series as ISeriesIndicator;
+
+    this.addMenuItem(
+      `Configure ${indicatorSeries.indicator.name}`,
+      () => {
+        this.configureIndicatorParams(indicatorSeries,event);
+      },
+      false
+    );
+  
+
+    }
     // Add remaining existing menu items
     this.addMenuItem(
       "⤝ Main Menu",
@@ -3657,5 +3693,253 @@ private showNotification(message: string, type: "success" | "error"): void {
     );
 
     this.showMenu(event);
+  }
+
+
+
+ /**
+   * Here, we define the method that shows a minimal overlay listing all indicators,
+   * letting the user click “Add” or “Remove.” We'll reuse references to `this.handler.chart`
+   * and `this.handler.seriesMap`, etc. We also define `this.applyIndicator` and `this.removeIndicator`
+   * as class methods that store a reference to each indicator's series in `indicatorSeriesMap`.
+   */
+
+  // A map from indicator name => { figureKey => ISeriesApi }
+  private indicatorSeriesMap = new Map<
+    string,
+    Map<string, ISeriesApi<"Line" | "Histogram" | "Area" | "Candlestick" | "Bar" | "Baseline" | "Custom">>
+  >();
+  public populateIndicatorMenu(
+    series: ISeriesApi<"Candlestick" | "Bar">,
+    event: MouseEvent
+  ) {
+    // Clear the menu first
+    this.div.innerHTML = "";
+  
+    // Show each indicator
+    ALL_INDICATORS.forEach((indicator) => {
+      this.addMenuItem(
+        `${indicator.name} (${indicator.shortName})`,
+        () => {
+          // If indicator has paramMap, let user configure
+          if (indicator.paramMap) {
+            this.configureIndicatorParams({series, indicator}, event);
+          } else {
+            // Otherwise, directly apply
+            this.applyIndicator(series, indicator, /* no overrides */ {});
+          }
+        },
+        false
+      );
+    });
+  
+    // Add a back/cancel item
+    this.addMenuItem("⤝ Back", () => {
+      this.hideMenu();
+      // or populate something else
+    }, false);
+  
+    // Display
+    this.showMenu(event);
+  }
+  
+  private configureIndicatorParams(
+    indicatorInput: { series: ISeriesApi<"Candlestick" | "Bar">, indicator: IndicatorDefinition } | ISeriesIndicator,
+    event: MouseEvent
+  ) {
+    // Clear existing menu items
+    this.div.innerHTML = "";
+  
+    // Extract the series and indicator from the input
+    const series = "sourceSeries" in indicatorInput ? indicatorInput : (indicatorInput.series as ISeriesApi<"Candlestick"|"Bar">);
+    const indicator = ("indicator" in indicatorInput ? indicatorInput.indicator : (indicatorInput as ISeriesIndicator).indicator) as IndicatorDefinition;
+  
+    // We'll store user overrides in a simple record
+    const overrides: Record<string, any> = {};
+  
+    // For each param in indicator.paramMap, create a row
+    Object.entries(indicator.paramMap).forEach(([paramName, paramSpec]) => {
+      const labelText = paramName; // or e.g. camelToTitle(paramName)
+      const defaultVal = paramSpec.defaultValue;  // numeric default
+  
+      // choose your input type
+      // e.g. paramSpec.type could be "number", "boolean", "select", etc.
+      if (paramSpec.type === "number") {
+        this.addNumberInput(
+          labelText,
+          defaultVal,
+          (newVal) => {
+            overrides[paramName] = newVal;
+          },
+          paramSpec.min, 
+          paramSpec.max, 
+          paramSpec.step
+        );
+        // also set an initial value
+        overrides[paramName] = defaultVal;
+      }
+      else if (paramSpec.type === "boolean") {
+        this.addCheckbox(
+          labelText,
+          Boolean(defaultVal),
+          (checked) => {
+            overrides[paramName] = checked;
+          }
+        );
+        overrides[paramName] = defaultVal;
+      }
+      else if (paramSpec.type === "select") {
+        // Suppose paramSpec.options is an array of strings
+        this.addSelectInput(
+          labelText,
+          String(defaultVal),
+          paramSpec.options || [],
+          (selected) => {
+            overrides[paramName] = selected;
+          }
+        );
+        overrides[paramName] = defaultVal;
+      }
+      // etc. if paramSpec.type === "color", "string", ...
+      else {
+        // fallback to text input or something
+        this.addMenuInput(this.div, {
+          type: "string",
+          label: labelText,
+          value: defaultVal,
+          onChange: (val) => {
+            overrides[paramName] = val;
+          },
+        });
+        overrides[paramName] = defaultVal;
+      }
+    });
+    // "Apply" button
+    this.addMenuItem(
+      "Apply",
+      () => {
+        this.hideMenu();
+
+        // If an existing indicator was passed, call its recalculate function
+        if ("recalculate" in indicatorInput) {
+          indicatorInput.recalculate(overrides);
+
+          // 🔄 Update legend for each figure in the indicator
+          indicatorInput.figures.forEach((figSeries, key) => {
+
+            
+            const legendItem = this.handler.legend._lines.find(
+              (item) => item.series === figSeries
+            );
+
+            if (legendItem) {
+              legendItem.name = figSeries.options().title;
+            }
+          });
+        } 
+        // Otherwise, apply a new indicator with the modified params
+        else {
+          this.applyIndicator(series, indicator, overrides);
+        }
+      },
+      false
+    );
+
+    // "Cancel" button
+    this.addMenuItem(
+      "Cancel",
+      () => {
+        this.hideMenu();
+      },
+      false
+    );
+
+    // Show updated menu
+    this.showMenu(event);
+  }
+  
+
+  private applyIndicator(series: ISeriesApi<"Candlestick"|"Bar">| ISeriesIndicator, ind: IndicatorDefinition, overrides: Record<string, any>) {
+    // 1) Grab your main data
+    const data = [...series.data()];
+    if (!data) {
+      console.warn("No data found on this series.");
+      return;
+    }
+  
+    // 2) If the data is OHLC and not whitespace
+    if (!(Array.isArray(data) && data.every(isOHLCData))) {
+      console.warn("Data is not recognized as OHLC or it is whitespace data.");
+      console.log(JSON.stringify(data, null, 2));
+      return;
+    }
+  
+    // 2a) Calculate the figures from the indicator
+    const figures = ind.calc([...data], overrides); // Pass user-specified params
+  
+    // 2b) If we already have them, update the existing figures
+    if (isISeriesIndicator(series)) {
+      const figMap = series.figures;
+      if (figMap) {
+        figures.forEach((f) => {
+          const existing = figMap.get(f.key);
+          if (existing) {
+            existing.setData(f.data);
+          }
+        });
+      }
+      return;
+    }
+  
+    // 2c) Otherwise, create new indicator series
+    const newMap = new Map<string, ISeriesIndicator>();
+  
+    figures.forEach((f, index) => {
+      const colorShades = generateShades(figures.length); // Generate unique shades
+      const selectedColor = colorShades[index];
+  
+      let seriesInstance: ISeriesApi<"Line" | "Histogram"> | null = null;
+      if (f.type === "histogram") {
+        const hist = this.handler.createHistogramSeries(f.title, {
+          color: selectedColor,
+          base: 0,
+          title: f.title,
+          group: ind.name
+        });
+        if (hist.series) {
+          hist.series.setData(f.data);
+          seriesInstance = (hist.series as ISeriesApi<"Histogram">);
+        }
+      } else {
+        const line = this.handler.createLineSeries(f.title, {
+          color: selectedColor,
+          lineWidth: 2,
+          title: f.title,
+          group: ind.name
+        });
+        if (line.series) {
+          line.series.setData(f.data);
+          seriesInstance = (line.series as ISeriesApi<"Line">);
+        }
+      }
+  
+      if (seriesInstance) {
+        // 🎯 Decorate the series instance as an `ISeriesIndicator`
+        const indicatorInstance = decorateSeriesAsIndicator(
+          seriesInstance,
+          series, // The original candlestick/bar series
+          ind,
+          newMap, // Store all related figures
+          overrides, // Store parameter overrides for recalculation
+          recalculateIndicator
+        );
+  
+        // Store the decorated indicator series
+        newMap.set(f.key, indicatorInstance);
+      }
+    });
+  
+    // Store the new indicator in the map
+    this.indicatorSeriesMap.set(ind.name, newMap);
   }
 }

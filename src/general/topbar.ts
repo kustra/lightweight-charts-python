@@ -148,7 +148,53 @@ export class TopBar {
         if (append) this.appendWidget(button, align, separator)
         return widget
     }
-
+    makeSliderWidget(
+        min: number,
+        max: number,
+        step: number,
+        defaultValue: number,
+        callbackName: string,
+        align: 'left' | 'right' = 'left'
+    ) {
+        // Create container for the slider
+        const sliderContainer = document.createElement('div');
+        sliderContainer.classList.add('topbar-slider-container');
+        sliderContainer.style.display = 'flex';
+        sliderContainer.style.alignItems = 'center';
+        sliderContainer.style.margin = '4px 12px';
+    
+        // Create label for displaying the value
+        const valueLabel = document.createElement('span');
+        valueLabel.classList.add('topbar-slider-label');
+        valueLabel.style.marginRight = '8px';
+        valueLabel.innerText = defaultValue.toString();
+    
+        // Create the slider input
+        const slider = document.createElement('input');
+        slider.classList.add('topbar-slider');
+        slider.type = 'range';
+        slider.min = min.toString();
+        slider.max = max.toString();
+        slider.step = step.toString();
+        slider.value = defaultValue.toString();
+        slider.style.cursor = 'pointer';
+    
+        // Update label and trigger callback on change
+        slider.addEventListener('input', () => {
+            valueLabel.innerText = slider.value;
+            window.callbackFunction(`${callbackName}_~_${slider.value}`);
+        });
+    
+        // Append elements to the slider container
+        sliderContainer.appendChild(valueLabel);
+        sliderContainer.appendChild(slider);
+    
+        // Append the slider widget to the top bar
+        this.appendWidget(sliderContainer, align, true);
+    
+        return sliderContainer;
+    }
+    
     makeSeparator(align='left') {
         const separator = document.createElement('div')
         separator.classList.add('topbar-seperator')

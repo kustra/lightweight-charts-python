@@ -4,11 +4,9 @@
 // External Library Imports
 // ----------------------------------
 import { LegendSeries, LegendGroup} from "../general/global-params"
-import { ISeriesApiExtended } from "../helpers/series";
 // ----------------------------------
 // Internal Helpers and Types
 // ----------------------------------
-import { buildOptions } from "../helpers/formatting"; // Ensure this helper exists or adjust accordingly
 
 // ----------------------------------
 // UI Components
