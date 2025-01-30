@@ -44,7 +44,7 @@ export interface IndicatorParamSpec {
   max?: number;
   step?: number;
   options?:string[];
-  
+
 }
 
 /** 
@@ -65,7 +65,8 @@ export interface IndicatorDefinition {
    */
   calc(
     dataList: (BarData | CandlestickData | OhlcData)[],
-    overrideParams?: Record<string, number>
+    overrideParams?: Record<string, number>,
+    volumeData?: SingleValueData[]
   ): IndicatorFigure[];
 }
 
@@ -148,7 +149,7 @@ const awesomeOscillator: IndicatorDefinition = {
 //  3) bias (BIAS)
 // ============================================
 const bias: IndicatorDefinition = {
-  name: 'BIAS',
+  name: 'Bias',
   shortName: 'BIAS',
   shouldOhlc: true,
   paramMap: {
@@ -200,7 +201,7 @@ function getBollMd(subset: (BarData | CandlestickData)[], mid: number) {
 }
 
 const bollingerBands: IndicatorDefinition = {
-  name: 'BOLL',
+  name: 'Bollinger Bands',
   shortName: 'BOLL',
   shouldOhlc: true,
   paramMap: {
@@ -251,7 +252,7 @@ const bollingerBands: IndicatorDefinition = {
 //  5) brar (BRAR)
 // ============================================
 const brar: IndicatorDefinition = {
-  name: 'BRAR',
+  name: 'Buy-Ratio Analysis',
   shortName: 'BRAR',
   shouldOhlc: true,
   paramMap: {
@@ -301,7 +302,7 @@ const brar: IndicatorDefinition = {
 //  6) bullAndBearIndex (BBI)
 // ============================================
 const bullAndBearIndex: IndicatorDefinition = {
-  name: 'BBI',
+  name: 'Bull and Bear Index',
   shortName: 'BBI',
   shouldOhlc: true,
   paramMap: {
@@ -345,7 +346,7 @@ const bullAndBearIndex: IndicatorDefinition = {
 //  7) commodityChannelIndex (CCI)
 // ============================================
 const commodityChannelIndex: IndicatorDefinition = {
-  name: 'CCI',
+  name: 'Commodity Channel Index',
   shortName: 'CCI',
   shouldOhlc: true,
   paramMap: {
@@ -390,7 +391,7 @@ const commodityChannelIndex: IndicatorDefinition = {
 //  8) currentRatio (CR)
 // ============================================
 const currentRatio: IndicatorDefinition = {
-  name: 'CR',
+  name: 'Current Ratio',
   shortName: 'CR',
   shouldOhlc: true,
   paramMap: {
@@ -435,7 +436,7 @@ const currentRatio: IndicatorDefinition = {
 //  9) differentOfMovingAverage (DMA)
 // ============================================
 const differentOfMovingAverage: IndicatorDefinition = {
-  name: 'DMA',
+  name: 'Difference of Moving Average',
   shortName: 'DMA',
   shouldOhlc: true,
   paramMap: {
@@ -502,7 +503,7 @@ const differentOfMovingAverage: IndicatorDefinition = {
 // 10) directionalMovementIndex (DMI)
 // ============================================
 const directionalMovementIndex: IndicatorDefinition = {
-  name: 'DMI',
+  name: 'Directional Movement Index',
   shortName: 'DMI',
   shouldOhlc: true,
   paramMap: {
@@ -650,7 +651,7 @@ const exponentialMovingAverage: IndicatorDefinition = {
 // 13) momentum (MTM)
 // ============================================
 const momentum: IndicatorDefinition = {
-  name: 'MTM',
+  name: 'Momentum',
   shortName: 'MTM',
   shouldOhlc: true,
   paramMap: {
@@ -697,7 +698,7 @@ const momentum: IndicatorDefinition = {
 // 14) movingAverage (MA)
 // ============================================
 const movingAverage: IndicatorDefinition = {
-  name: 'MA',
+  name: 'Moving Average',
   shortName: 'MA',
   shouldOhlc: true,
   paramMap: {
@@ -740,7 +741,7 @@ const movingAverage: IndicatorDefinition = {
 // 15) movingAverageConvergenceDivergence (MACD)
 // ============================================
 const movingAverageConvergenceDivergence: IndicatorDefinition = {
-  name: 'MACD',
+  name: 'Moving Average Convergence Divergence',
   shortName: 'MACD',
   shouldOhlc: true,
   paramMap: {
@@ -814,7 +815,7 @@ const movingAverageConvergenceDivergence: IndicatorDefinition = {
 // 18) psychologicalLine (PSY)
 // ============================================
 const psychologicalLine: IndicatorDefinition = {
-  name: 'PSY',
+  name: 'Psychological Line',
   shortName: 'PSY',
   shouldOhlc: true,
   paramMap: {
@@ -870,7 +871,7 @@ const psychologicalLine: IndicatorDefinition = {
 // 19) rateOfChange (ROC)
 // ============================================
 const rateOfChange: IndicatorDefinition = {
-  name: 'ROC',
+  name: 'Rate of Change',
   shortName: 'ROC',
   shouldOhlc: true,
   paramMap: {
@@ -921,7 +922,7 @@ const rateOfChange: IndicatorDefinition = {
 // 20) relativeStrengthIndex (RSI)
 // ============================================
 const relativeStrengthIndex: IndicatorDefinition = {
-  name: 'RSI',
+  name: 'Relative Strength Index',
   shortName: 'RSI',
   shouldOhlc: true,
   paramMap: {
@@ -977,7 +978,7 @@ const relativeStrengthIndex: IndicatorDefinition = {
 // 21) simpleMovingAverage (SMA)
 // ============================================
 const simpleMovingAverage: IndicatorDefinition = {
-  name: 'SMA',
+  name: 'Simple Moving Average',
   shortName: 'SMA',
   shouldOhlc: true,
   paramMap: {
@@ -1020,7 +1021,7 @@ const simpleMovingAverage: IndicatorDefinition = {
 // 22) stoch (a.k.a. KDJ)
 // ============================================
 const stoch: IndicatorDefinition = {
-  name: 'KDJ',
+  name: 'Stochastic',
   shortName: 'KDJ',
   shouldOhlc: true,
   paramMap: {
@@ -1076,7 +1077,7 @@ const stoch: IndicatorDefinition = {
 // 23) stopAndReverse (SAR)
 // ============================================
 const stopAndReverse: IndicatorDefinition = {
-  name: 'SAR',
+  name: 'Stop and Reverse',
   shortName: 'SAR',
   shouldOhlc: true,
   paramMap: {
@@ -1223,7 +1224,7 @@ const tripleExponentiallySmoothedAverage: IndicatorDefinition = {
 // 27) williamsR (WR)
 // ============================================
 const williamsR: IndicatorDefinition = {
-  name: 'WR',
+  name: 'Williams %R',
   shortName: 'WR',
   shouldOhlc: true,
   paramMap: {
@@ -1264,37 +1265,625 @@ const williamsR: IndicatorDefinition = {
   },
 };
 
+//------------------------------------------------------------------
+//From Pinescript: 
+//
 
 
+// ============================================
+//  1) Arnaud Legoux Moving Average (ALMA)
+// ============================================
+const arnaudLegouxMovingAverage: IndicatorDefinition = {
+    name: 'Arnaud Legoux Moving Average',
+    shortName: 'ALMA',
+    shouldOhlc: false,
+    paramMap: {
+      windowSize: { defaultValue: 9, type: 'number', min: 1, max: 200 },
+      offset:     { defaultValue: 0.85, type: 'number', min: 0, max: 1, step: 0.01 },
+      sigma:      { defaultValue: 6, type: 'number', min: 1, max: 10 },
+    },
+    calc(dataList, overrideParams) {
+      const p = getParams(this, overrideParams);
+      const windowSize = p.windowSize;
+      const offset = p.offset;
+      const sigma = p.sigma;
+  
+      const m = offset * (windowSize - 1);
+      const s = windowSize / sigma;
+  
+      const almaArr: SingleValueData[] = [];
+  
+      dataList.forEach((bar, i) => {
+        if (i < windowSize - 1) {
+          almaArr.push({ time: bar.time, value: NaN });
+          return;
+        }
+  
+        let norm = 0;
+        let sum = 0;
+  
+        for (let j = 0; j < windowSize; j++) {
+          const weight = Math.exp(-Math.pow(j - m, 2) / (2 * Math.pow(s, 2)));
+          norm += weight;
+          sum += dataList[i - (windowSize - j - 1)].close * weight;
+        }
+  
+        almaArr.push({ time: bar.time, value: sum / norm });
+      });
+  
+      return [{ key: 'alma', title: 'ALMA', type: 'line', data: almaArr }];
+    },
+  };
+  
+  // ============================================
+  //  2) Running Moving Average (RMA)
+  // ============================================
+  const rollingMovingAverage: IndicatorDefinition = {
+    name: 'Rolling Moving Average',
+    shortName: 'RMA',
+    shouldOhlc: false,
+    paramMap: {
+      length: { defaultValue: 14, type: 'number', min: 1, max: 200 },
+    },
+    calc(dataList, overrideParams) {
+      const p = getParams(this, overrideParams);
+      const length = p.length;
+      const alpha = 1 / length;
+  
+      const rmaArr: SingleValueData[] = [];
+      let sum = 0;
+  
+      dataList.forEach((bar, i) => {
+        if (i === 0) {
+          sum = bar.close;
+        } else {
+          sum = alpha * bar.close + (1 - alpha) * sum;
+        }
+        rmaArr.push({ time: bar.time, value: sum });
+      });
+  
+      return [{ key: 'rma', title: 'RMA', type: 'line', data: rmaArr }];
+    },
+  };
+  
+  // ============================================
+  //  3) Symmetric Weighted Moving Average (SWMA)
+  // ============================================
+  const symmetricWeightedMovingAverage: IndicatorDefinition = {
+    name: 'Symmetrically Weighted Moving Average',
+    shortName: 'SWMA',
+    shouldOhlc: false,
+    paramMap: {},
+    calc(dataList) {
+      const swmaArr: SingleValueData[] = [];
+  
+      dataList.forEach((bar, i) => {
+        if (i < 3) {
+          swmaArr.push({ time: bar.time, value: NaN });
+          return;
+        }
+  
+        const swmaValue =
+          (dataList[i - 3].close * 1 / 6) +
+          (dataList[i - 2].close * 2 / 6) +
+          (dataList[i - 1].close * 2 / 6) +
+          (dataList[i].close * 1 / 6);
+  
+        swmaArr.push({ time: bar.time, value: swmaValue });
+      });
+  
+      return [{ key: 'swma', title: 'SWMA', type: 'line', data: swmaArr }];
+    },
+  };
+  
+  // ============================================
+  //  4) Weighted Moving Average (WMA)
+  // ============================================
+  const weightedMovingAverage: IndicatorDefinition = {
+    name: 'weighted Moving Average',
+    shortName: 'WMA',
+    shouldOhlc: false,
+    paramMap: {
+      length: { defaultValue: 9, type: 'number', min: 1, max: 200 },
+    },
+    calc(dataList, overrideParams) {
+      const p = getParams(this, overrideParams);
+      const length = p.length;
+  
+      const wmaArr: SingleValueData[] = [];
+  
+      dataList.forEach((bar, i) => {
+        if (i < length - 1) {
+          wmaArr.push({ time: bar.time, value: NaN });
+          return;
+        }
+  
+        let norm = 0;
+        let sum = 0;
+  
+        for (let j = 0; j < length; j++) {
+          const weight = (length - j);
+          norm += weight;
+          sum += dataList[i - j].close * weight;
+        }
+  
+        wmaArr.push({ time: bar.time, value: sum / norm });
+      });
+  
+      return [{ key: 'wma', title: 'WMA', type: 'line', data: wmaArr }];
+    },
+  };
+  
+
+
+  const superTrend: IndicatorDefinition = {
+    name: 'Super Trend',
+    shortName: 'SuperTrend',
+    shouldOhlc: true,
+    paramMap: {
+      factor:     { defaultValue: 3,  type: 'number', min: 1, max: 10, step: 0.1 },
+      atrPeriod:  { defaultValue: 10, type: 'number', min: 1, max: 50 },
+    },
+    calc(dataList, overrideParams) {
+      const p = getParams(this, overrideParams);
+      const factor = p.factor;
+      const atrPeriod = p.atrPeriod;
+  
+      const superTrendArr: SingleValueData[] = [];
+      const directionArr: SingleValueData[] = [];
+  
+      let prevSuperTrend = NaN;
+      let prevUpperBand = NaN;
+      let prevLowerBand = NaN;
+      let _direction = NaN;
+  
+      dataList.forEach((bar, i) => {
+        if (i < atrPeriod - 1) {
+          superTrendArr.push({ time: bar.time, value: NaN });
+          directionArr.push({ time: bar.time, value: NaN });
+          return;
+        }
+  
+        const src = (bar.high + bar.low) / 2;
+        const atr = getATR(dataList, i, atrPeriod);
+  
+        let upperBand = src + factor * atr;
+        let lowerBand = src - factor * atr;
+  
+        if (!isNaN(prevLowerBand)) {
+          lowerBand = lowerBand > prevLowerBand || dataList[i - 1].close < prevLowerBand
+            ? lowerBand
+            : prevLowerBand;
+        }
+  
+        if (!isNaN(prevUpperBand)) {
+          upperBand = upperBand < prevUpperBand || dataList[i - 1].close > prevUpperBand
+            ? upperBand
+            : prevUpperBand;
+        }
+  
+        if (isNaN(prevSuperTrend)) {
+          _direction = 1;
+        } else if (prevSuperTrend === prevUpperBand) {
+          _direction = bar.close > upperBand ? -1 : 1;
+        } else {
+          _direction = bar.close < lowerBand ? 1 : -1;
+        }
+  
+        const superTrend = _direction === -1 ? lowerBand : upperBand;
+        superTrendArr.push({ time: bar.time, value: superTrend });
+        directionArr.push({ time: bar.time, value: _direction });
+  
+        prevSuperTrend = superTrend;
+        prevUpperBand = upperBand;
+        prevLowerBand = lowerBand;
+      });
+  
+      return [
+        { key: 'superTrend', title: 'Super Trend', type: 'line', data: superTrendArr },
+        { key: 'direction', title: 'Direction', type: 'line', data: directionArr },
+      ];
+    },
+  };
+  
+  // Helper function to calculate ATR
+  function getATR(dataList: (BarData | CandlestickData)[], index: number, period: number): number {
+    if (index < period - 1) return NaN;
+  
+    let sum = 0;
+    for (let i = index - period + 1; i <= index; i++) {
+      const tr = Math.max(
+        dataList[i].high - dataList[i].low,
+        Math.abs(dataList[i].high - dataList[i - 1]?.close || dataList[i].high),
+        Math.abs(dataList[i].low - dataList[i - 1]?.close || dataList[i].low)
+      );
+      sum += tr;
+    }
+  
+    return sum / period;
+  }
+
+  const averageTrueRange: IndicatorDefinition = {
+    name: 'Average True Range',
+    shortName: 'ATR',
+    shouldOhlc: true,
+    paramMap: {
+      period: { defaultValue: 14, type: 'number', min: 1, max: 100 },
+    },
+    calc(dataList, overrideParams) {
+      const p = getParams(this, overrideParams);
+      const period = p.period;
+  
+      const atrArr: SingleValueData[] = [];
+      let sumTR = 0;
+      const trValues: number[] = [];
+  
+      dataList.forEach((bar, i) => {
+        if (i === 0) {
+          atrArr.push({ time: bar.time, value: NaN });
+          return;
+        }
+  
+        const prevClose = dataList[i - 1].close;
+        const tr = Math.max(
+          bar.high - bar.low,
+          Math.abs(bar.high - prevClose),
+          Math.abs(bar.low - prevClose)
+        );
+  
+        trValues.push(tr);
+        sumTR += tr;
+  
+        if (trValues.length > period) {
+          sumTR -= trValues.shift()!;
+        }
+  
+        const atrVal = trValues.length >= period ? sumTR / period : NaN;
+        atrArr.push({ time: bar.time, value: atrVal });
+      });
+  
+      return [{ key: 'atr', title: 'ATR', type: 'line', data: atrArr }];
+    },
+  };
+  
+  const highestHigh: IndicatorDefinition = {
+    name: 'Highest High',
+    shortName: 'HH',
+    shouldOhlc: true,
+    paramMap: {
+      period: { defaultValue: 14, type: 'number', min: 1, max: 100 },
+    },
+    calc(dataList, overrideParams) {
+      const p = getParams(this, overrideParams);
+      const period = p.period;
+  
+      const hhArr: SingleValueData[] = [];
+  
+      dataList.forEach((bar, i) => {
+        if (i < period - 1) {
+          hhArr.push({ time: bar.time, value: NaN });
+          return;
+        }
+  
+        let highest = -Infinity;
+        for (let j = i - (period - 1); j <= i; j++) {
+          highest = Math.max(highest, dataList[j].high);
+        }
+  
+        hhArr.push({ time: bar.time, value: highest });
+      });
+  
+      return [{ key: 'hh', title: 'Highest High', type: 'line', data: hhArr }];
+    },
+  };
+  const lowestLow: IndicatorDefinition = {
+    name: 'Lowest Low',
+    shortName: 'LL',
+    shouldOhlc: true,
+    paramMap: {
+      period: { defaultValue: 14, type: 'number', min: 1, max: 100 },
+    },
+    calc(dataList, overrideParams) {
+      const p = getParams(this, overrideParams);
+      const period = p.period;
+  
+      const llArr: SingleValueData[] = [];
+  
+      dataList.forEach((bar, i) => {
+        if (i < period - 1) {
+          llArr.push({ time: bar.time, value: NaN });
+          return;
+        }
+  
+        let lowest = Infinity;
+        for (let j = i - (period - 1); j <= i; j++) {
+          lowest = Math.min(lowest, dataList[j].low);
+        }
+  
+        llArr.push({ time: bar.time, value: lowest });
+      });
+  
+      return [{ key: 'll', title: 'Lowest Low', type: 'line', data: llArr }];
+    },
+  };
+  const median: IndicatorDefinition = {
+    name: 'Median',
+    shortName: 'Median',
+    shouldOhlc: true,
+    paramMap: {
+      period: { defaultValue: 14, type: 'number', min: 1, max: 100 },
+    },
+    calc(dataList, overrideParams) {
+      const p = getParams(this, overrideParams);
+      const period = p.period;
+  
+      const medianArr: SingleValueData[] = [];
+  
+      dataList.forEach((bar, i) => {
+        if (i < period - 1) {
+          medianArr.push({ time: bar.time, value: NaN });
+          return;
+        }
+  
+        const subset = dataList.slice(i - (period - 1), i + 1).map(b => b.close);
+        subset.sort((a, b) => a - b);
+        const mid = Math.floor(subset.length / 2);
+        const medianVal = subset.length % 2 === 0
+          ? (subset[mid - 1] + subset[mid]) / 2
+          : subset[mid];
+  
+        medianArr.push({ time: bar.time, value: medianVal });
+      });
+  
+      return [{ key: 'median', title: 'Median', type: 'line', data: medianArr }];
+    },
+  };
+  const standardDeviation: IndicatorDefinition = {
+    name: 'Standard Deviation',
+    shortName: 'StdDev',
+    shouldOhlc: true,
+    paramMap: {
+      period: { defaultValue: 14, type: 'number', min: 1, max: 100 },
+    },
+    calc(dataList, overrideParams) {
+      const p = getParams(this, overrideParams);
+      const period = p.period;
+  
+      const stdDevArr: SingleValueData[] = [];
+  
+      dataList.forEach((bar, i) => {
+        if (i < period - 1) {
+          stdDevArr.push({ time: bar.time, value: NaN });
+          return;
+        }
+  
+        const subset = dataList.slice(i - (period - 1), i + 1).map(b => b.close);
+        const mean = subset.reduce((sum, val) => sum + val, 0) / subset.length;
+        const variance = subset.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / subset.length;
+        const stdDev = Math.sqrt(variance);
+  
+        stdDevArr.push({ time: bar.time, value: stdDev });
+      });
+  
+      return [{ key: 'stdDev', title: 'Standard Deviation', type: 'line', data: stdDevArr }];
+    },
+  };
+  const variance: IndicatorDefinition = {
+    name: 'Variance',
+    shortName: 'Variance',
+    shouldOhlc: true,
+    paramMap: {
+      period: { defaultValue: 14, type: 'number', min: 1, max: 100 },
+    },
+    calc(dataList, overrideParams) {
+      const p = getParams(this, overrideParams);
+      const period = p.period;
+  
+      const varianceArr: SingleValueData[] = [];
+  
+      dataList.forEach((bar, i) => {
+        if (i < period - 1) {
+          varianceArr.push({ time: bar.time, value: NaN });
+          return;
+        }
+  
+        const subset = dataList.slice(i - (period - 1), i + 1).map(b => b.close);
+        const mean = subset.reduce((sum, val) => sum + val, 0) / subset.length;
+        const variance = subset.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / subset.length;
+  
+        varianceArr.push({ time: bar.time, value: variance });
+      });
+  
+      return [{ key: 'variance', title: 'Variance', type: 'line', data: varianceArr }];
+    },
+  };
+  const change: IndicatorDefinition = {
+    name: 'Change',
+    shortName: 'Change',
+    shouldOhlc: true,
+    paramMap: {
+      period: { defaultValue: 1, type: 'number', min: 1, max: 100 },
+    },
+    calc(dataList, overrideParams) {
+      const p = getParams(this, overrideParams);
+      const period = p.period;
+  
+      const changeArr: SingleValueData[] = [];
+  
+      dataList.forEach((bar, i) => {
+        if (i < period) {
+          changeArr.push({ time: bar.time, value: NaN });
+          return;
+        }
+  
+        const prevClose = dataList[i - period].close;
+        const changeVal = bar.close - prevClose;
+  
+        changeArr.push({ time: bar.time, value: changeVal });
+      });
+  
+      return [{ key: 'change', title: 'Change', type: 'line', data: changeArr }];
+    },
+  };
+  const range: IndicatorDefinition = {
+    name: 'Range',
+    shortName: 'Range',
+    shouldOhlc: true,
+    paramMap: {
+      period: { defaultValue: 14, type: 'number', min: 1, max: 100 },
+    },
+    calc(dataList, overrideParams) {
+      const p = getParams(this, overrideParams);
+      const period = p.period;
+  
+      const rangeArr: SingleValueData[] = [];
+  
+      dataList.forEach((bar, i) => {
+        if (i < period - 1) {
+          rangeArr.push({ time: bar.time, value: NaN });
+          return;
+        }
+  
+        const subset = dataList.slice(i - (period - 1), i + 1);
+        const highest = Math.max(...subset.map(b => b.high));
+        const lowest = Math.min(...subset.map(b => b.low));
+  
+        rangeArr.push({ time: bar.time, value: highest - lowest });
+      });
+  
+      return [{ key: 'range', title: 'Range', type: 'line', data: rangeArr }];
+    },
+  };
+  
+  const volumeWeightedAveragePrice: IndicatorDefinition = {
+    name: 'Volume Weighted Average Price',
+    shortName: 'VWAP',
+    shouldOhlc: true,
+    paramMap: {
+      anchorInterval: { 
+        defaultValue: 1, 
+        type: 'number', 
+        min: 1, 
+        max: 1440, 
+        step: 1 
+      }, // Defines reset frequency
+    },
+    calc(dataList,  overrideParams, volumeData) {
+      if (!volumeData) {      return [{ key: 'vwap', title: 'VWAP', type: 'line', data:[]}];
+    }
+      const p = getParams(this, overrideParams);
+      const anchorInterval = p.anchorInterval;
+  
+      let cumulativeVolume = 0;
+      let cumulativeVWAP = 0;
+  
+      // ✅ Convert volumeData into a Map for fast time-based lookups
+      const volumeMap = new Map([...volumeData].map(v => [v.time, v.value]));
+  
+      const vwapArr: SingleValueData[] = [];
+  
+      dataList.forEach((bar, i) => {
+        const volume = volumeData[i].value ?? 0;
+        const typicalPrice = (bar.high + bar.low + bar.close) / 3;
+        const vwapValue = typicalPrice * volume;
+  
+        cumulativeVWAP += vwapValue;
+        cumulativeVolume += volume;
+  
+        const vwap = cumulativeVolume !== 0 ? cumulativeVWAP / cumulativeVolume : NaN;
+        vwapArr.push({ time: bar.time, value: vwap });
+      });
+  
+      return [{ key: 'vwap', title: 'VWAP', type: 'line', data: vwapArr }];
+    },
+  };
+  
+  const volumeWeightedMovingAverage: IndicatorDefinition = {
+    name: 'Volume Weighted Moving Average',
+    shortName: 'VWMA',
+    shouldOhlc: true,
+    paramMap: {
+      period: { defaultValue: 20, type: 'number', min: 1, max: 200 },
+    },
+    calc( dataList, overrideParams?, volumeData?) {
+      if (!volumeData) {return [{ key: 'vwma', title: 'VWMA', type: 'line', data: [] }] }
+      const p = getParams(this, overrideParams);
+
+      const period = p.period;
+  
+      const vwmaArr: SingleValueData[] = [];
+      let sumVolumePrice = 0;
+      let sumVolume = 0;
+  
+    
+      dataList.forEach((bar, i) => {
+        const volume = volumeData[i].value ?? 0;
+        const volumePrice = bar.close * volume;
+        sumVolumePrice += volumePrice;
+        sumVolume += volume;
+  
+        if (i >= period - 1) {
+          const vwma = sumVolume !== 0 ? sumVolumePrice / sumVolume : NaN;
+          vwmaArr.push({ time: bar.time, value: vwma });
+  
+          const oldVolume = volumeData[i - (period - 1)].value ?? 0;
+          const oldVolumePrice = dataList[i - (period - 1)].close * oldVolume;
+          sumVolumePrice -= oldVolumePrice;
+          sumVolume -= oldVolume;
+        } else {
+          vwmaArr.push({ time: bar.time, value: NaN });
+        }
+      });
+  
+      return [{ key: 'vwma', title: 'VWMA', type: 'line', data: vwmaArr }];
+    },
+  };
+  
 // Then add them to your ALL_INDICATORS array as well, if desired.
 
 // =====================================================================
 //  ALL_INDICATORS (collect them in one array)
 // =====================================================================
 export const ALL_INDICATORS: IndicatorDefinition[] = [
-  awesomeOscillator,
-  bias,
-  bollingerBands,
-  brar,
-  bullAndBearIndex,
-  commodityChannelIndex,
-  currentRatio,
-  differentOfMovingAverage,
-  directionalMovementIndex,
-  exponentialMovingAverage,
-  momentum,
-  movingAverage,
-  movingAverageConvergenceDivergence,
-  psychologicalLine,
-  rateOfChange,
-  relativeStrengthIndex,
-  simpleMovingAverage,
-  stoch,
-  stopAndReverse,
-  tripleExponentiallySmoothedAverage,
-  williamsR,
+    // Overlay Indicators
+    arnaudLegouxMovingAverage,
+    bollingerBands,
+    exponentialMovingAverage,
+    highestHigh,
+    lowestLow,
+    median,
+    movingAverage,
+    rollingMovingAverage,
+    simpleMovingAverage,
+    stopAndReverse,
+    superTrend,
+    symmetricWeightedMovingAverage,
+    tripleExponentiallySmoothedAverage,
+    volumeWeightedAveragePrice,
+    volumeWeightedMovingAverage,
+    weightedMovingAverage,
 
-  // optionally your other ones if you implement them similarly:
-  // ...
+    // Oscillator Indicators
+    awesomeOscillator,
+    averageTrueRange,
+    bias,
+    brar,
+    bullAndBearIndex,
+    commodityChannelIndex,
+    currentRatio,
+    differentOfMovingAverage,
+    directionalMovementIndex,
+    momentum,
+    movingAverageConvergenceDivergence,
+    psychologicalLine,
+    rateOfChange,
+    relativeStrengthIndex,
+    stoch,
+    variance,
+    williamsR,
+    change,
+    range,
+    standardDeviation
 ];
+
 
