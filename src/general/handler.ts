@@ -37,6 +37,7 @@ import {
 } from "../helpers/series";
 import { ohlcSeriesOptions, ohlcdefaultOptions, ohlcSeries } from "../ohlc-series/ohlc-series";
 import { TradeSeriesOptions, tradeDefaultOptions, TradeSeries } from "../tx-series/renderer";
+import { isISeriesApi } from "../helpers/typeguards";
 
 
 
@@ -648,60 +649,74 @@ export class Handler {
      * Removes a series from the chart and updates the legend accordingly.
      * @param seriesName - The name of the series to remove.
      */
-    removeSeries(seriesName: string): void {
-        // Retrieve the series from the seriesMap using the seriesName
-        const series = this.seriesMap.get(seriesName);
-        if (!series) {
-            console.warn(`Series "${seriesName}" does not exist and cannot be removed.`);
+    removeSeries(series: string | ISeriesApiExtended): void {
+        let seriesName: string | undefined;
+    
+        // 🚀 **Step 1: Find Series Name (Reverse Lookup)**
+        if (isISeriesApi(series)) {
+            // Find the key (name) associated with this series in `seriesMap`
+            for (const [key, value] of this.seriesMap.entries()) {
+                if (value === series) {
+                    seriesName = key;
+                    break;
+                }
+            }
+        } else {
+            // If input is a string, assume it's already a series name
+            seriesName = series;
+            series = this.seriesMap.get(series) as ISeriesApiExtended;
+        }
+    
+        if (!series || !seriesName) {
+            console.warn(`❌ Series "${series}" does not exist and cannot be removed.`);
             return;
         }
-
-        // **1. Detach and Remove Primitives from the Series**
+    
+        series = series as ISeriesApiExtended;
+    
+        // 🚀 **Step 2: Detach and Remove Primitives**
         if (series.primitives && series.primitives.length > 0) {
             series.primitives.forEach((primitive: ISeriesPrimitive) => {
                 series.detachPrimitive(primitive);
-                console.log(`Detached primitive from series "${seriesName}".`);
+                console.log(`✅ Detached primitive from series "${seriesName}".`);
             });
         }
-
     
-        // **3. Update Internal Tracking Structures**
-        // Remove from _seriesList
+        // 🚀 **Step 3: Remove from Internal Tracking Structures**
         this._seriesList = this._seriesList.filter(s => s !== series);
-        console.log(`Series "${seriesName}" removed from _seriesList.`);
-
-        // Remove from seriesMap
         this.seriesMap.delete(seriesName);
-        console.log(`Series "${seriesName}" removed from seriesMap.`);
-
-            // Find the legend entry that belongs to this series
-        const legendItem = this.legend._items.find(
-            (item) => (item as LegendSeries).series === series
-        ) as LegendSeries | undefined;
-        if (legendItem) {
-            // **a. Remove Primitives from the Legend**
-            if (legendItem.primitives && legendItem.primitives.length > 0) {
-                legendItem.primitives.forEach((primitive: LegendPrimitive) => {
-                    this.legend.removeLegendPrimitive(primitive);
-                    console.log(`Removed primitive from legend for series "${seriesName}".`);
-                });
+        console.log(`✅ Series "${seriesName}" removed from internal maps.`);
+    
+        // 🚀 **Step 4: Remove from Legend (Safely)**
+        try {
+            const legendItem = this.legend._items.find(
+                (item) => (item as LegendSeries).series === series
+            ) as LegendSeries | undefined;
+    
+            if (legendItem) {
+                // Remove associated primitives
+                if (legendItem.primitives && legendItem.primitives.length > 0) {
+                    legendItem.primitives.forEach((primitive: LegendPrimitive) => {
+                        this.legend.removeLegendPrimitive(primitive);
+                        console.log(`✅ Removed primitive from legend for series "${seriesName}".`);
+                    });
+                }
+    
+                // Remove legend entry
+                this.legend.deleteLegendEntry(legendItem.name, legendItem.group ?? undefined);
+                console.log(`✅ Removed series "${seriesName}" from legend.`);
+            } else {
+                console.warn(`⚠️ Legend item for series "${seriesName}" not found.`);
             }
-
-
-                this.legend.deleteLegendEntry(legendItem);
-                console.log(`Removed standalone series "${seriesName}" from legend.`);
-            
-        } else {
-            console.warn(`Legend item for series "${seriesName}" not found.`);
+        } catch (error) {
+            console.error(`⚠️ Error removing legend entry for "${seriesName}":`, error);
         }
+    
+        // 🚀 **Step 5: Remove Series from Chart**
         this.chart.removeSeries(series);
-    // **2. Remove the Series from the Chart**
-    console.log(`Series "${seriesName}" removed from the chart.`);
-
-        console.log(`Series "${seriesName}" successfully removed.`);
+        console.log(`✅ Series "${seriesName}" successfully removed.`);
     }
-
-
+    
     createToolBox() {
         this.toolBox = new ToolBox(this, this.id, this.chart, this.series, this.commandFunctions);
         this.div.appendChild(this.toolBox.div);

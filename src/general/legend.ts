@@ -389,7 +389,7 @@ makeSeriesRow(line: LegendSeries, container: HTMLDivElement): HTMLDivElement {
 
     // **Set Action Button Color to Match Series Color**
     const seriesColor = line.colors[0] || '#000'; // Default to black if no color specified
-    actionButton.style.color = seriesColor;
+    actionButton.style.color = '#ffffff';
 
     // **Attach Click Listener to Action Button**
     actionButton.addEventListener('click', (event) => {
@@ -514,29 +514,101 @@ makeSeriesRow(line: LegendSeries, container: HTMLDivElement): HTMLDivElement {
             && (entry as LegendPrimitive).row !== undefined;
     }
 
-    /**
-     * Single method to delete any kind of LegendEntry.
-     * Could be a group, a series, or a primitive.
+        /**
+     * Deletes a legend entry, either a standalone series or an entire group.
+     * @param seriesName The name of the series to delete.
+     * @param groupName The name of the group to delete or from which to delete the series.
      */
-    public deleteLegendEntry(entry: LegendEntry): void {
-        // Remove from _items first.
-        const indexInItems = this._items.indexOf(entry);
-        if (indexInItems !== -1) {
-            this._items.splice(indexInItems, 1);
-        } else {
-            console.warn(`Legend entry "${(entry as any).name}" not found in _items array.`);
+        deleteLegendEntry(seriesName?: string, groupName?: string): void {
+            if (groupName && !seriesName) {
+                // Remove entire group
+                const groupIndex = this._groups.findIndex(group => group.name === groupName);
+                if (groupIndex !== -1) {
+                    const legendGroup = this._groups[groupIndex];
+    
+                    // Remove the group's DOM elements
+                    this.seriesContainer.removeChild(legendGroup.row);
+    
+                    // Optionally, remove all series in the group from the chart
+                    // legendGroup.seriesList.forEach(item => item.series.remove());
+    
+                    // Remove from the _groups array
+                    this._groups.splice(groupIndex, 1);
+    
+                    // Also remove from _items array
+                    this._items = this._items.filter(entry => entry !== legendGroup);
+    
+                    console.log(`Group "${groupName}" removed.`);
+                } else {
+                    console.warn(`Legend group with name "${groupName}" not found.`);
+                }
+            } else if (seriesName) {
+                // Remove individual series
+                let removed = false;
+    
+                if (groupName) {
+                    // Remove from specific group
+                    const group = this._groups.find(g => g.name === groupName);
+                    if (group) {
+                        const itemIndex = group.seriesList.findIndex(item => item.name === seriesName);
+                        if (itemIndex !== -1) {
+    
+                            // Remove from the group's seriesList
+                            group.seriesList.splice(itemIndex, 1);
+    
+                            // If the group is now empty, remove it
+                            if (group.seriesList.length === 0) {
+                                this.seriesContainer.removeChild(group.row);
+                                this._groups = this._groups.filter(g => g !== group);
+                                this._items = this._items.filter(entry => entry !== group);
+                                console.log(`Group "${groupName}" is empty and has been removed.`);
+                            } else {
+                                // Re-render the group to update its display
+                                this.renderGroup(group, this.seriesContainer);
+                            }
+    
+                            // Optionally, remove the series from the chart
+                            // seriesItem.series.remove();
+    
+                            removed = true;
+                            console.log(`Series "${seriesName}" removed from group "${groupName}".`);
+                        }
+                    } else {
+                        console.warn(`Legend group with name "${groupName}" not found.`);
+                    }
+                }
+    
+                if (!removed) {
+                    // Remove from _lines (individual legend items)
+                    const seriesIndex = this._lines.findIndex(series => series.name === seriesName);
+                    if (seriesIndex !== -1) {
+                        const legendSeries = this._lines[seriesIndex];
+    
+                        // Remove the DOM elements
+                        this.seriesContainer.removeChild(legendSeries.row!);
+    
+                        // Remove from the _lines array
+                        this._lines.splice(seriesIndex, 1);
+    
+                        // Also remove from _items array
+                        this._items = this._items.filter(entry => entry !== legendSeries);
+    
+                        // Optionally, remove the series from the chart
+                        // legendSeries.series.remove();
+    
+                        removed = true;
+                        console.log(`Series "${seriesName}" removed.`);
+                    }
+                }
+    
+                if (!removed) {
+                    console.warn(`Legend item with name "${seriesName}" not found.`);
+                }
+            } else {
+                console.warn(`No seriesName or groupName provided for deletion.`);
+            }
         }
-
-        if (this.isLegendGroup(entry)) {
-            this.removeLegendGroup(entry);
-        } else if (this.isLegendSeries(entry)) {
-            this.removeLegendSeries(entry);
-        } else if (this.isLegendPrimitive(entry)) {
-            this.removeLegendPrimitive(entry);
-        } else {
-            console.warn(`Unknown LegendEntry type for: `, entry);
-        }
-    }
+    
 
     /** Removes an entire LegendGroup from the legend. */
     public removeLegendGroup(group: LegendGroup): void {
@@ -559,67 +631,130 @@ makeSeriesRow(line: LegendSeries, container: HTMLDivElement): HTMLDivElement {
 
         console.log(`Group "${group.name}" removed from legend.`);
     }
-        /**
-         * Removes a single LegendSeries from the legend.
-         * Can be called with either:
-         * - an `ISeriesApi` (to find and remove its associated `LegendSeries`).
-         * - a `LegendSeries` (to remove it directly).
-         * @param seriesOrLegend - Either an `ISeriesApi` or `LegendSeries`.
-         */
-        public removeLegendSeries(seriesOrLegend: ISeriesApi<SeriesType> | LegendSeries): void {
-            let legendSeries: LegendSeries | undefined;
 
-            if (!isISeriesApi(seriesOrLegend)) {
-                // Case 1: Directly remove the LegendSeries
-                legendSeries = seriesOrLegend;
-            } else {
-                // Case 2: It's an ISeriesApi, so we need to find its corresponding LegendSeries
-                legendSeries = this._items.find(
-                    (item): item is LegendSeries => this.isLegendSeries(item) && item.series === seriesOrLegend
-                );
+    
+    // Helper method to search all possible locations for a series
+    private findSeriesAnywhere(series: ISeriesApi<SeriesType>): LegendSeries | undefined {
+        // Check standalone series first
+        const standalone = this._lines.find(s => s.series === series);
+        if (standalone) return standalone;
+    
+        // Search through all groups and subgroups
+        for (const group of this._groups) {
+            const found = this.findSeriesInGroup(group, series);
+            if (found) return found;
+        }
+        return undefined;
+    }
+    
+    private findSeriesInGroup(group: LegendGroup, series: ISeriesApi<SeriesType>): LegendSeries | undefined {
+        // Check current group's series
+        const inCurrentGroup = group.seriesList.find(s => s.series === series);
+        if (inCurrentGroup) return inCurrentGroup;
+    
+        // Recursively check subgroups
+        for (const subgroup of group.subGroups) {
+            const found = this.findSeriesInGroup(subgroup, series);
+            if (found) return found;
+        }
+        return undefined;
+    }
+    private removeSeriesFromGroupDOM(group: LegendGroup, series: LegendSeries): boolean {
+        if (!group.div || !series.row) {
+            console.warn(`⚠️ Cannot remove series "${series.name}" – missing group div or series row.`);
+            return false;
+        }
+    
+        // 🚀 1️⃣ Check if the series exists inside the group div
+        if (group.div.contains(series.row)) {
+            try {
+                group.div.removeChild(series.row);
+                console.log(`✅ Removed series "${series.name}" from group "${group.name}".`);
+                return true; // Successfully removed from this group
+            } catch (error) {
+                console.warn(`⚠️ Error removing series "${series.name}" from group "${group.name}":`, error);
+                return false;
             }
-
-            if (!legendSeries) {
-                console.warn("LegendSeries not found in legend.");
-                return;
-            }
-
-            // If the series is part of a group, remove it from the group
-            if (legendSeries.group) {
-                const group = this._groups.find(g => g.name === legendSeries.group);
-                if (group) {
-                    group.seriesList = group.seriesList.filter(item => item !== legendSeries);
-
-                    // If the group is now empty, remove it entirely
-                    if (group.seriesList.length === 0) {
-                        if (this.seriesContainer.contains(group.row)) {
-                            this.seriesContainer.removeChild(group.row);
-                        }
-                        this._groups = this._groups.filter(g => g !== group);
-                        this._items = this._items.filter(item => item !== group);
-                        console.log(`Group "${group.name}" is empty and has been removed.`);
-                    } else {
-                        // Re-render the group if needed
-                        this.renderGroup(group, this.seriesContainer);
+        }
+    
+        // 🚀 2️⃣ Recursively check subgroups
+        return group.subGroups.some(subgroup => this.removeSeriesFromGroupDOM(subgroup, series));
+    }
+    
+    public removeLegendSeries(seriesOrLegend: ISeriesApi<SeriesType> | LegendSeries): void {
+        let legendSeries: LegendSeries | undefined;
+    
+        // 🚀 1️⃣ Identify if it's an ISeriesApi or LegendSeries
+        if (!isISeriesApi(seriesOrLegend)) {
+            legendSeries = seriesOrLegend;
+        } else {
+            legendSeries = this.findSeriesAnywhere(seriesOrLegend);
+        }
+    
+        if (!legendSeries) {
+            console.warn("⚠️ LegendSeries not found in legend.");
+            return;
+        }
+    
+        // 🚀 2️⃣ Remove from tracking arrays
+        this._lines = this._lines.filter(s => s !== legendSeries);
+        this._items = this._items.filter(item => item !== legendSeries);
+    
+        // 🚀 3️⃣ Handle removal from a group OR standalone series
+        if (legendSeries.group) {
+            const group = this.findGroup(legendSeries.group);
+            if (group) {
+                // 🔥 Remove from the group's series list
+                group.seriesList = group.seriesList.filter(item => item !== legendSeries);
+                
+                // ✅ Remove from group's `div` container in the DOM
+                if (legendSeries.row && group.div.contains(legendSeries.row)) {
+                    try {
+                        group.div.removeChild(legendSeries.row);
+                        console.log(`✅ Removed "${legendSeries.name}" from group "${group.name}".`);
+                    } catch (error) {
+                        console.warn(`⚠️ Error removing "${legendSeries.name}" from group "${group.name}":`, error);
                     }
-                    console.log(`Series "${legendSeries.name}" removed from group "${legendSeries.group}".`);
+                }
+    
+                // ✅ If the group is now empty, remove it
+                if (group.seriesList.length === 0) {
+                    this.removeGroupCompletely(group);
+                } 
+            }
+        } else {
+            // 🚀 4️⃣ Remove Standalone Series from DOM
+            if (legendSeries.row?.parentElement) {
+                try {
+                    legendSeries.row.parentElement.removeChild(legendSeries.row);
+                    console.log(`✅ Removed row for standalone series: ${legendSeries.name}`);
+                } catch (error) {
+                    console.warn(`⚠️ Error removing standalone series row:`, error);
                 }
             }
-
-            // Remove from _lines
-            this._lines = this._lines.filter(s => s !== legendSeries);
-
-            // Remove the row from DOM
-            if (this.seriesContainer.contains(legendSeries.row!)) {
-                this.seriesContainer.removeChild(legendSeries.row!);
-            }
-
-            // Remove from _items
-            this._items = this._items.filter(item => item !== legendSeries);
-
-            console.log(`LegendSeries "${legendSeries.name}" removed from legend.`);
         }
 
+    }
+    
+    
+    
+    
+    private removeGroupCompletely(group: LegendGroup): void {
+        // Remove group from DOM only if it exists
+        if (group.row.parentElement) {
+            try {
+                group.row.parentElement.removeChild(group.row);
+            } catch (error) {
+                console.warn(`Error removing group "${group.name}":`, error);
+            }
+        }
+    
+        // Clean up tracking arrays
+        this._groups = this._groups.filter(g => g !== group);
+        this._items = this._items.filter(item => item !== group);
+        
+        console.log(`Group "${group.name}" removed as it became empty.`);
+    }
 
 public removeLegendPrimitive(primitiveOrLegend: ISeriesPrimitive | LegendPrimitive): void {
    let legendPrimitive: LegendPrimitive | undefined;
@@ -817,7 +952,7 @@ private renderGroup(group: LegendGroup, container: HTMLDivElement): void {
     // **Set Group Action Button Color to Match Group Color**
     // Use the first series' primary color or default to black
     const groupColor = group.seriesList[0]?.colors[0] || '#000';
-    groupActionButton.style.color = groupColor;
+    groupActionButton.style.color = '#ffffff';
 
     // **Attach Click Listener to Group Action Button**
     groupActionButton.addEventListener('click', (event) => {

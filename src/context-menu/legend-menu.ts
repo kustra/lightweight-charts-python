@@ -81,9 +81,7 @@ export class LegendMenu {
             this.ungroupSeries(group);
         });
 
-        this.contextMenu.addMenuItem("Remove Primitives", () => {
-            this.removePrimitivesFromGroup(group);
-        });
+
         this.contextMenu.showMenu(event)
     }
 
@@ -105,9 +103,13 @@ export class LegendMenu {
         this.contextMenu.addMenuItem("Remove Series", () => {
             if (confirm(`Are you sure you want to remove the series "${seriesItem.name}"?`)) {
 
-                this.handler.removeSeries(seriesItem.name);
+                this.handler.legend.removeLegendSeries(seriesItem.series) 
+                this.handler.removeSeries(seriesItem.series);
+
             }
-        });
+        })
+                    
+      
         if (seriesItem.primitives){
         this.contextMenu.addMenuItem("Remove Primitives", () => {
             this.removePrimitivesFromSeries(seriesItem);
@@ -182,17 +184,10 @@ export class LegendMenu {
      * @param group The LegendGroup to remove.
      */
     private removeGroup(group: LegendGroup): void {
+        this.handler.legend.removeLegendGroup(group)
 
         // Remove the group from the internal groups array
         this.handler.legend._groups = this.handler.legend._groups.filter((g:LegendGroup) => g !== group);
-
-        // Remove all series in the group from the chart
-        group.seriesList.forEach(seriesItem => {
-            this.handler.removeSeries(seriesItem.name);
-        });
-        // Remove the group's DOM element
-        this.handler.legend.seriesContainer.removeChild(group.row);
-
         console.log(`Group "${group.name}" removed along with its series.`);
     }
 
@@ -228,25 +223,7 @@ export class LegendMenu {
         console.log(`Series "${seriesItem.name}" removed from its group and is now standalone.`);
     }
 
-    /**
-     * Removes all primitives associated with a LegendGroup.
-     * @param group The LegendGroup to remove primitives from.
-     */
-    private removePrimitivesFromGroup(group: LegendGroup): void {
-        group.seriesList.forEach(seriesItem => {
-            // Assuming each series has a 'primitives' property holding primitives
-            if (seriesItem.series.primitives) {
-                Object.values(seriesItem.series.primitives).forEach(primitive => {
-                    seriesItem.series.detachPrimitive(primitive); // Assuming a remove method exists
-                    console.log(`Primitive removed from series "${seriesItem.name}".`);
-                });
-                seriesItem.primitives = undefined; // Reset primitives
-            }
-        });
-
-        console.log(`All primitives removed from group "${group.name}".`);
-    }
-
+    
     /**
      * Removes all primitives associated with a LegendSeries.
      * @param seriesItem The LegendSeries to remove primitives from.

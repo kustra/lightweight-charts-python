@@ -3822,6 +3822,7 @@ private showNotification(message: string, type: "success" | "error"): void {
 
         // If an existing indicator was passed, call its recalculate function
         if ("recalculate" in indicatorInput) {
+
           indicatorInput.recalculate(overrides);
 
           // 🔄 Update legend for each figure in the indicator
@@ -3833,7 +3834,12 @@ private showNotification(message: string, type: "success" | "error"): void {
             );
 
             if (legendItem) {
+
+      
+              this.handler.seriesMap.set( figSeries.options().title, series as ISeriesApiExtended);
               legendItem.name = figSeries.options().title;
+              
+
             }
           });
         } 
