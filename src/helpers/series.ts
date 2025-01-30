@@ -4,6 +4,7 @@ import { isOHLCData, isSingleValueData, isWhitespaceData } from "./typeguards";
 import { TradeData, tradeDefaultOptions, TradeSeries, TradeSeriesOptions } from "../tx-series/renderer";
 import { ohlcSeries, ohlcSeriesOptions } from "../ohlc-series/ohlc-series";
 import { Handler, Legend } from "../general";
+import { IndicatorDefinition } from "../indicators/indicators";
 
 
 export interface ISeriesApiExtended extends ISeriesApi<SeriesType> {
@@ -762,3 +763,59 @@ export function ensureExtendedSeries(
   console.log("Decorating the series dynamically.");
   return decorateSeries(series, legend);
 }
+export interface ISeriesIndicator extends ISeriesApi<"Line" | "Histogram" | "Area"> {
+  sourceSeries: ISeriesApi<"Candlestick" | "Bar">;
+  indicator: IndicatorDefinition;
+  figures: Map<string, ISeriesApi<"Line" | "Histogram" | "Area">>; // Stores all related figures
+  paramMap: Record<string, any>; // The last used params for recalculation
+  recalculate: (overrides?: Record<string, any>) => void;
+}
+
+export function decorateSeriesAsIndicator(
+  series: ISeriesApi<"Line" | "Histogram" | "Area">,
+  sourceSeries: ISeriesApi<"Candlestick" | "Bar">,
+  ind: IndicatorDefinition,
+  figures: Map<string, ISeriesApi<"Line" | "Histogram" | "Area">>,
+  paramMap: Record<string, any>,
+  recalculateIndicator: (indicator: ISeriesIndicator, overrides?: Record<string, any>) => void
+): ISeriesIndicator {
+  return Object.assign(series, {
+    sourceSeries,
+    indicator: ind,
+    figures,
+    paramMap,
+    recalculate: function (overrides?: Record<string, any>) {
+      recalculateIndicator(this as ISeriesIndicator, overrides);
+    },
+  }) as ISeriesIndicator;
+}
+
+
+export function recalculateIndicator(indicatorSeries: ISeriesIndicator, overrides?: Record<string, any>) {
+  // Merge new overrides into stored params
+  const updatedParams = { ...indicatorSeries.paramMap, ...overrides };
+
+  // Retrieve original data from source series
+  const data = [...indicatorSeries.sourceSeries.data()];
+  if (!data || !Array.isArray(data) || !data.every(isOHLCData)) {
+    console.warn("⚠️ Data is not in the expected OHLC format.");
+    return;
+  }
+
+  // 1️⃣ Run the original calculation
+  const newFigures = indicatorSeries.indicator.calc(data, updatedParams);
+
+  // 2️⃣ Apply the new data to each figure in the figures Map
+  newFigures.forEach((newFigure) => {
+    const existingSeries = indicatorSeries.figures.get(newFigure.key);
+    if (existingSeries) {
+      existingSeries.setData(newFigure.data); // ✅ Update data
+
+      // ✅ Correctly update the title
+        existingSeries.applyOptions({ title: newFigure.title });
+      }
+    });
+  
+    // 3️⃣ Store the updated params for future recalculations
+    indicatorSeries.paramMap = updatedParams;
+  }

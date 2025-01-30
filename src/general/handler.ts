@@ -37,9 +37,6 @@ import {
 } from "../helpers/series";
 import { ohlcSeriesOptions, ohlcdefaultOptions, ohlcSeries } from "../ohlc-series/ohlc-series";
 import { TradeSeriesOptions, tradeDefaultOptions, TradeSeries } from "../tx-series/renderer";
-import { TrendTrace } from "../trend-trace/trend-trace";
-import { isISeriesApi } from "../helpers/typeguards";
-
 
 
 
@@ -690,9 +687,7 @@ export class Handler {
                 });
             }
 
-            // **b. Remove the Legend Entry**
-            const group = legendItem.group;
-            
+
                 this.legend.deleteLegendEntry(legendItem);
                 console.log(`Removed standalone series "${seriesName}" from legend.`);
             

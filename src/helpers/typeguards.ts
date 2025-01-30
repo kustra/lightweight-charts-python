@@ -2,7 +2,7 @@ import { SeriesType, ISeriesApi, AreaData, Background, BarData, CandlestickData,
 import { LegendSeries, LegendPrimitive, LegendGroup, LegendItem } from "../general";
 import { FillArea } from "../fill-area/fill-area";
 import { CandleShape, ohlcSeriesData } from "../ohlc-series/data";
-import { ISeriesApiExtended } from "./series";
+import { ISeriesApiExtended, ISeriesIndicator } from "./series";
 export function isSolidColor(background: Background): background is SolidColor {
   return background.type === ColorType.Solid;
 }
@@ -105,4 +105,10 @@ export function isISeriesApi(series: any): series is ISeriesApi<SeriesType>| ISe
     typeof series.data === "function" &&
     typeof series.options === "function" 
   );
+}
+// Type Guard: Check if the series is an ISeriesIndicator
+export function isISeriesIndicator(series: any): series is ISeriesIndicator {
+  return (series as ISeriesIndicator).figures !== undefined &&
+         (series as ISeriesIndicator).sourceSeries !== undefined &&
+         (series as ISeriesIndicator).indicator !== undefined;
 }

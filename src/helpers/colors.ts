@@ -84,3 +84,43 @@ export function darkenColor(color: string, amount: number = 0.2): string {
         ? `#${((1 << 24) + (Math.round(r) << 16) + (Math.round(g) << 8) + Math.round(b)).toString(16).slice(1)}`
         : `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${a})`;
 }
+/**
+ * Generates a range of shades from a randomly selected base color.
+ * @param count - The number of shades to generate.
+ * @returns An array of color shades.
+ */
+export function generateShades(count: number): string[] {
+    // List of potential base colors
+    const colorList =   ["#ff0000","#ff8700","#ffd300","#a1ff0a","#117a03","#0aff99","#0aefff","#147df5","#580aff","#be0aff"];
+  
+    // Pick a random base color
+    const baseColor = colorList[Math.floor(Math.random() * colorList.length)];
+  
+    // Convert HEX to RGB
+    const hexToRgb = (hex: string) => {
+      let r = parseInt(hex.slice(1, 3), 16);
+      let g = parseInt(hex.slice(3, 5), 16);
+      let b = parseInt(hex.slice(5, 7), 16);
+      return { r, g, b };
+    };
+  
+    // Convert RGB back to HEX
+    const rgbToHex = (r: number, g: number, b: number) => {
+      const toHex = (c: number) => Math.min(255, Math.max(0, c)).toString(16).padStart(2, "0");
+      return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+    };
+  
+    const { r, g, b } = hexToRgb(baseColor);
+    const shades: string[] = [];
+  
+    for (let i = 0; i < count; i++) {
+      const factor = 1 - (i / (count * 1.5)); // Adjust brightness
+      const newR = Math.round(r * factor);
+      const newG = Math.round(g * factor);
+      const newB = Math.round(b * factor);
+      shades.push(rgbToHex(newR, newG, newB));
+    }
+  
+    return shades;
+  }
+  

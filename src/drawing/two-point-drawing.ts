@@ -3,7 +3,7 @@ import { DrawingOptions, defaultOptions } from './options';
 import { Drawing } from './drawing';
 import { TwoPointDrawingPaneView } from './pane-view';
 import { PluginBase } from '../plugin-base';
-import { ensureExtendedSeries, ISeriesApiExtended } from '../helpers/series';
+import { ISeriesApiExtended } from '../helpers/series';
 
 
 export abstract class TwoPointDrawing extends Drawing {
