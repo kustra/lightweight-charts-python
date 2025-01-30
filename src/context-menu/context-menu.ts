@@ -14,6 +14,7 @@ import {
   VerticalGradientColor,
   Background,
   ISeriesApi,
+  SingleValueData,
 } from "lightweight-charts";
 // ----------------------------------
 // Internal Helpers and Types
@@ -3879,9 +3880,9 @@ private showNotification(message: string, type: "success" | "error"): void {
       console.log(JSON.stringify(data, null, 2));
       return;
     }
-  
+    const volumeData = this.handler.volumeSeries.data() as SingleValueData[]
     // 2a) Calculate the figures from the indicator
-    const figures = ind.calc([...data], overrides); // Pass user-specified params
+    const figures = ind.calc([...data], overrides,volumeData??undefined); // Pass user-specified params
   
     // 2b) If we already have them, update the existing figures
     if (isISeriesIndicator(series)) {
@@ -3910,8 +3911,8 @@ private showNotification(message: string, type: "success" | "error"): void {
           color: selectedColor,
           base: 0,
           title: f.title,
-          group: ind.name
-        });
+          ...(figures.length > 1 ? { group: ind.name } : {}) // ✅ Only set `group` if multiple figures exist
+                });
         if (hist.series) {
           hist.series.setData(f.data);
           seriesInstance = (hist.series as ISeriesApi<"Histogram">);
@@ -3921,8 +3922,9 @@ private showNotification(message: string, type: "success" | "error"): void {
           color: selectedColor,
           lineWidth: 2,
           title: f.title,
-          group: ind.name
-        });
+          ...(figures.length > 1 ? { group: ind.name } : {} // ✅ Only set `group` if multiple figures exist
+        
+    )});
         if (line.series) {
           line.series.setData(f.data);
           seriesInstance = (line.series as ISeriesApi<"Line">);
