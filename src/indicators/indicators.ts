@@ -1,11 +1,7 @@
 /* 
-  Complete Integration of All Indicators with Lightweight Charts
+  Partial Integration of KLineCharts' Indicators with Lightweight Charts
   ===============================================================
-  Now each `paramMap` entry is an object like:
-     shortPeriod: { defaultValue: 12, type: 'number', min:1, max:200 }
 
-  This makes it straightforward to read param definitions, build a menu, 
-  and override them when calling `calc(data, overrideParams)`.
 */
 
 import {

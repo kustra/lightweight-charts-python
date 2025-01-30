@@ -58,10 +58,6 @@ export class LegendMenu {
         this.contextMenu.showMenu(event);
     }
 
-    /**
-     * Populates the context menu for a LegendGroup.
-     * @param group The LegendGroup to populate the menu for.
-     */
     private populateGroupMenu(group: LegendGroup, event: MouseEvent): void {
         // Add Group-Specific Options
         this.contextMenu.addMenuItem("Rename Group", () => {
@@ -69,21 +65,28 @@ export class LegendMenu {
             if (newName && newName.trim() !== "") {
                 this.renameGroup(group, newName.trim());
             }
-        },false);
-
+        }, false);
+    
         this.contextMenu.addMenuItem("Remove All", () => {
             if (confirm(`Are you sure you want to remove the group "${group.name}"? This will also remove all contained series.`)) {
+                group.seriesList.forEach((seriesItem: LegendSeries) => {
+                    this.handler.legend.removeLegendSeries(seriesItem.series);
+                    this.handler.removeSeries(seriesItem.series);
+                });
+    
+                // Remove the group after all series have been removed
                 this.removeGroup(group);
             }
         });
-
+    
         this.contextMenu.addMenuItem("Ungroup All", () => {
             this.ungroupSeries(group);
         });
-
-
-        this.contextMenu.showMenu(event)
+    
+        // Show the context menu at the event location
+        this.contextMenu.showMenu(event);
     }
+    
 
     /**
      * Populates the context menu for a LegendSeries.
