@@ -766,8 +766,9 @@ export function ensureExtendedSeries(
 export interface ISeriesIndicator extends ISeriesApi<"Line" | "Histogram" | "Area"> {
   sourceSeries: ISeriesApi<"Candlestick" | "Bar">;
   indicator: IndicatorDefinition;
-  figures: Map<string, ISeriesApi<"Line" | "Histogram" | "Area">>; // Stores all related figures
-  paramMap: Record<string, any>; // The last used params for recalculation
+  figures: Map<string, ISeriesApi<"Line" | "Histogram" | "Area">>;
+  paramMap: Record<string, any>; // Stores the current parameters used for calculation
+  figureCount: number ;            // NEW: stores the global figure count
   recalculate: (overrides?: Record<string, any>) => void;
 }
 
@@ -776,46 +777,55 @@ export function decorateSeriesAsIndicator(
   sourceSeries: ISeriesApi<"Candlestick" | "Bar">,
   ind: IndicatorDefinition,
   figures: Map<string, ISeriesApi<"Line" | "Histogram" | "Area">>,
+  figureCount: number,
   paramMap: Record<string, any>,
   recalculateIndicator: (indicator: ISeriesIndicator, overrides?: Record<string, any>) => void
 ): ISeriesIndicator {
-  return Object.assign(series, {
+  const indicatorSeries = Object.assign(series, {
     sourceSeries,
     indicator: ind,
     figures,
     paramMap,
+    figureCount,            // NEW: stores the global figure count
+
     recalculate: function (overrides?: Record<string, any>) {
       recalculateIndicator(this as ISeriesIndicator, overrides);
     },
   }) as ISeriesIndicator;
+
+  // Subscribe to data changes on the source series to trigger automatic recalculation.
+  if (typeof sourceSeries.subscribeDataChanged === "function") {
+    sourceSeries.subscribeDataChanged(() => {
+      if (sourceSeries.data()[sourceSeries.data().length-1].time > series.data()[series.data().length -1].time){ 
+      recalculateIndicator(indicatorSeries);
+    }});
+  }
+
+  return indicatorSeries;
 }
 
-
 export function recalculateIndicator(indicatorSeries: ISeriesIndicator, overrides?: Record<string, any>) {
-  // Merge new overrides into stored params
+  // Merge new overrides into the stored parameters to get the current parameters.
   const updatedParams = { ...indicatorSeries.paramMap, ...overrides };
 
-  // Retrieve original data from source series
+  // Retrieve the source series data.
   const data = [...indicatorSeries.sourceSeries.data()];
   if (!data || !Array.isArray(data) || !data.every(isOHLCData)) {
-    console.warn("⚠️ Data is not in the expected OHLC format.");
     return;
   }
 
-  // 1️⃣ Run the original calculation
+  // Run the indicator's calculation with the updated parameters.
   const newFigures = indicatorSeries.indicator.calc(data, updatedParams);
 
-  // 2️⃣ Apply the new data to each figure in the figures Map
+  // For each calculated figure, update the corresponding series if it exists.
   newFigures.forEach((newFigure) => {
     const existingSeries = indicatorSeries.figures.get(newFigure.key);
     if (existingSeries) {
-      existingSeries.setData(newFigure.data); // ✅ Update data
+      existingSeries.setData(newFigure.data);
+      existingSeries.applyOptions({ title: newFigure.title });
+    }
+  });
 
-      // ✅ Correctly update the title
-        existingSeries.applyOptions({ title: newFigure.title });
-      }
-    });
-  
-    // 3️⃣ Store the updated params for future recalculations
-    indicatorSeries.paramMap = updatedParams;
-  }
+  // Store the current (merged) parameters for future recalculations.
+  indicatorSeries.paramMap = updatedParams;
+}

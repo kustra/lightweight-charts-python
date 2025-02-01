@@ -85,6 +85,23 @@ class ButtonWidget(Widget):
         # self.value = string
         self.run_script(f'{self.id}.elem.innerText = "{string}"')
 
+class SliderWidget(Widget):
+    def __init__(self, topbar, min_value, max_value, step, default, align, func):
+        super().__init__(topbar, value=default, func=func)
+
+        self.min = min_value
+        self.max = max_value
+        self.step = step
+
+        self.run_script(f'''
+        {self.id} = {topbar.id}.makeSliderWidget({self.min}, {self.max}, {self.step}, {default}, "{self.id}", "{align}")
+        ''')
+
+    def set(self, value):
+        if not (self.min <= value <= self.max):
+            raise ValueError(f"Value {value} is out of range ({self.min}-{self.max})")
+        self.value = value
+        self.run_script(f'{self.id}.slider.value = {value}; {self.id}.valueLabel.innerText = {value}')
 
 class TopBar(Pane):
     def __init__(self, chart):
@@ -126,3 +143,8 @@ class TopBar(Pane):
                align: ALIGN = 'left', toggle: bool = False, func: callable = None):
         self._create()
         self._widgets[name] = ButtonWidget(self, button_text, separator, align, toggle, func)
+
+    def slider(self, name: str, min_value: int, max_value: int, step: int, default: int,
+               align: ALIGN = 'left', func: callable = None):
+        self._create()
+        self._widgets[name] = SliderWidget(self, min_value, max_value, step, default, align, func)

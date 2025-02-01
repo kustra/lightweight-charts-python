@@ -244,19 +244,46 @@ class SeriesCommon(Pane):
         self._last_bar = series
         self.run_script(f'{self.id}.series.update({js_data(series)})')
 
+    def _init_markers(self):
+        """
+        Creates a markers primitive once for this series,
+        stored at `series.markers`.
+        
+        In the JS code, you need something like:
+          import { createSeriesMarkers } from 'lightweight-charts';
+        
+        Then we do:
+          series.markers = createSeriesMarkers(series, []);
+        """
+        self.run_script(f"""
+            if (!{self.id}.series.markers) {{
+                {self.id}.series.markers = createSeriesMarkers({self.id}.series, []);
+            }}
+        """)
+
     def _update_markers(self):
-        self.run_script(f'{self.id}.series.setMarkers({json.dumps(list(self.markers.values()))})')
+        """
+        Replaces the old call '{self.id}.series.setMarkers(...)'
+        with the new v5 call:
+          '{self.id}.series.markers.setMarkers(...)'
+        """
+        markers_list = list(self.markers.values())  # from your Python dict
+        markers_json = json.dumps(markers_list)
+        self.run_script(f"""
+            {self.id}.series.markers.setMarkers({markers_json});
+        """)
+
+    # ============ Everything else is mostly unchanged ============
 
     def marker_list(self, markers: list):
         """
-        Creates multiple markers.\n
-        :param markers: The list of markers to set. These should be in the format:\n
-        [
-            {"time": "2021-01-21", "position": "below", "shape": "circle", "color": "#2196F3", "text": ""},
-            {"time": "2021-01-22", "position": "below", "shape": "circle", "color": "#2196F3", "text": ""},
-            ...
-        ]
-        :return: a list of marker ids.
+        Creates multiple markers.
+        `markers` is a list of dicts, for example:
+          [
+              {"time": "2021-01-21", "position": "below", "shape": "circle", "color": "#2196F3", "text": ""},
+              ...
+          ]
+        Returns a list of new marker IDs.
         """
         markers = markers.copy()
         marker_ids = []
@@ -273,17 +300,16 @@ class SeriesCommon(Pane):
         self._update_markers()
         return marker_ids
 
-    def marker(self, time: Optional[datetime] = None, position: MARKER_POSITION = 'below',
-               shape: MARKER_SHAPE = 'arrow_up', color: str = '#2196F3', text: str = ''
-               ) -> str:
+    def marker(self,
+               time: Optional[datetime] = None,
+               position: str = 'below',
+               shape: str = 'arrow_up',
+               color: str = '#2196F3',
+               text: str = '') -> str:
         """
-        Creates a new marker.\n
-        :param time: Time location of the marker. If no time is given, it will be placed at the last bar.
-        :param position: The position of the marker.
-        :param color: The color of the marker (rgb, rgba or hex).
-        :param shape: The shape of the marker.
-        :param text: The text to be placed with the marker.
-        :return: The id of the marker placed.
+        Creates a new marker.
+        If no `time` is given, places it at the last bar.
+        Returns the newly generated marker ID.
         """
         try:
             formatted_time = self._last_bar['time'] if not time else self._single_datetime_format(time)
@@ -303,9 +329,16 @@ class SeriesCommon(Pane):
 
     def remove_marker(self, marker_id: str):
         """
-        Removes the marker with the given id.\n
+        Removes the marker with the given id.
         """
-        self.markers.pop(marker_id)
+        self.markers.pop(marker_id, None)
+        self._update_markers()
+
+    def clear_markers(self):
+        """
+        Clears all markers from this series.
+        """
+        self.markers.clear()
         self._update_markers()
 
     def horizontal_line(self, price: NUM, color: str = 'rgb(122, 146, 202)', width: int = 2,
@@ -910,165 +943,165 @@ class Candlestick(SeriesCommon):
             }}
         }})''')
 
-#class PositionPlot(SeriesCommon):
-#    def __init__(
-#        self,
-#        chart,
-#        name: str,
-#        side: str = "long",  # 'long' or 'short'
-#        mode: str = "relative",
-#        background_color_stop: str = "rgba(255,0,0,0.2)",
-#        background_color_target: str = "rgba(0,255,0,0.2)",
-#        price_line: bool = True,
-#        price_label: bool = True,
-#        group: str = "Position",
-#        legend_symbol: str = "⚑",
-#        auto: bool = True,
-#    ):
-#        super().__init__(chart, name)
-#        self.group = group
-#        self.legend_symbol = legend_symbol
-#
-#        if side not in ("long", "short"):
-#            raise ValueError("side must be 'long' or 'short'")
-#        if mode not in ("relative", "absolute"):
-#            raise ValueError("mode must be 'relative' or 'absolute'")
-#
-#        # Create trade series in the JS environment
-#        js_code = f"""
-#        {self.id} = {chart.id}.createTradeSeries("{name}", {{
-#            name: "{name}",
-#            group: "{group}",
-#            side: "{side}",
-#            mode: "{mode}",
-#            backgroundColorStop: "{background_color_stop}",
-#            backgroundColorTarget: "{background_color_target}",
-#            lastValueVisible: {str(price_label).lower()},
-#            priceLineVisible: {str(price_line).lower()},
-#            legendSymbol: "{legend_symbol}",
-#            auto: {str(auto).lower()}
-#        }});
-#        """
-#        try:
-#            self.run_script(js_code)
-#        except JavascriptException as e:
-#            raise RuntimeError(f"Failed to create trade series. JS Error: {e}")
-#
-#    def set(self, df: Optional[pd.DataFrame] = None, format_cols: bool = True):
-#        if df is None or df.empty:
-#            self.run_script(f'''{self.id}.series.setData([])''')
-#            self.data = pd.DataFrame()
-#            return
-#        if format_cols:
-#            df = self._df_datetime_format(df, exclude_lowercase=self.name)
-#        if not df.empty:
-#           # if 'entry_price' not in df:
-#           #     raise NameError(f'No column named "{'entry_price'}".')
-#            df['value'] = df['entry']#.rename(columns={self.name: 'value'})
-#        self.data = df.copy()
-#        self._last_bar = df.iloc[-1]
-#        self.run_script(f'''{self.id}.series.setData({js_data(df)}); ''')
-#    def delete(self):
-#        """
-#        Irreversibly deletes the trade series.
-#        """
-#        self.run_script(f'''
-#            {self.id}legendItem = {self._chart.id}.legend._lines.find((line) => line.series == {self.id}.series)
-#            {self._chart.id}.legend._lines = {self._chart.id}.legend._lines.filter((item) => item != {self.id}legendItem)
-#
-#            if ({self.id}legendItem) {{
-#                {self._chart.id}.legend.div.removeChild({self.id}legendItem.row)
-#            }}
-#
-#            {self._chart.id}.chart.removeSeries({self.id}.series)
-#            delete {self.id}legendItem
-#            delete {self.id}
-#        ''')
-#    def initiate_trade(
-#        self,
-#        time: Optional[Any] = None,
-#        entry: float = 0.0,
-#        stop: Optional[float] = None,
-#        target: Optional[float] = None,
-#        action: str = "entry",
-#        amount: float = 1.0,
-#        display_info: str = "",
-#    ) -> None:
-#        """
-#        Initiates or updates a trade on the PositionPlot by inserting one new data point
-#        into the trade series. If `time` is not provided, this method attempts to fetch
-#        the last bar's time from the base series in the trade series' options.
-#        """
-#        time_str = self._get_time_or_last_bar(time)
-#
-#        trade_point = {
-#            "time": time_str,
-#            "entry": entry,
-#            "stop": stop if stop is not None else None,
-#            "target": target if target is not None else None,
-#            "action": action,
-#            "amount": amount,
-#            "displayInfo": display_info,
-#        }
-#
-#        trade_json = js_data([trade_point])[1:-1]  # turn list -> single object
-#        js_code = f"{self.id}.series.update({trade_json});"
-#        self.run_script(js_code)
-#    def close_trade(
-#        self,
-#        time: Optional[Any] = None,
-#        display_info: str = "",
-#    ) -> None:
-#        """
-#        Closes an existing trade on the PositionPlot by sending an update 
-#        with action='close'. If `time` is not provided, we attempt to fetch 
-#        the last bar's time from the base series in the trade series' options.
-#
-#        :param time: The time at which the trade is closed. 
-#                    If None, fetch from the base series' latest bar or fallback to "now".
-#        :param display_info: Optional text info to display on the chart regarding the close.
-#        """
-#        time_str = self._get_time_or_last_bar(time)
-#
-#        # 3) Build the trade point dictionary, with action='close'
-#        trade_point = {
-#            "time": time_str,
-#            "action": "close",
-#            "displayInfo": display_info,
-#        }
-#
-#        # 4) Convert to JS object
-#        trade_json = js_data([trade_point])[1:-1]  # remove the surrounding [ ]
-#
-#        # 5) Send the update to the trade series
-#        js_code = f"{self.id}.series.update({trade_json});"
-#        self.run_script(js_code)
-#
-#    def _get_time_or_last_bar(self, time: Optional[Any]) -> str:
-#        """
-#        Returns a JS-friendly time string:
-#        - If `time` is provided, convert it.
-#        - Otherwise, fetch the last bar's time from baseSeries or fallback to "now".
-#        """
-#        if time is not None:
-#            return self._convert_time(time)
-#
-#        # No time -> fetch from base series
-#        js_fetch_time = f"""
-#        (function() {{
-#            const baseSeries = {self.id}.series.options().baseSeries;
-#            if (!baseSeries) return null;
-#            const data = baseSeries.data();
-#            if (!data || data.length === 0) return null;
-#            return data[data.length - 1].time;
-#        }})();
-#        """
-#        last_bar_time = self.run_script(js_fetch_time)
-#        if last_bar_time is None:
-#            # fallback to "now"
-#            last_bar_time = pd.Timestamp.now().isoformat()
-#
-#        return self._convert_time(last_bar_time)
+class PositionPlot(SeriesCommon):
+    def __init__(
+        self,
+        chart,
+        name: str,
+        side: str = "long",  # 'long' or 'short'
+        mode: str = "relative",
+        background_color_stop: str = "rgba(255,0,0,0.2)",
+        background_color_target: str = "rgba(0,255,0,0.2)",
+        price_line: bool = True,
+        price_label: bool = True,
+        group: str = "Position",
+        legend_symbol: str = "⚑",
+        auto: bool = True,
+    ):
+        super().__init__(chart, name)
+        self.group = group
+        self.legend_symbol = legend_symbol
+
+        if side not in ("long", "short"):
+            raise ValueError("side must be 'long' or 'short'")
+        if mode not in ("relative", "absolute"):
+            raise ValueError("mode must be 'relative' or 'absolute'")
+
+        # Create trade series in the JS environment
+        js_code = f"""
+        {self.id} = {chart.id}.createTradeSeries("{name}", {{
+            name: "{name}",
+            group: "{group}",
+            side: "{side}",
+            mode: "{mode}",
+            backgroundColorStop: "{background_color_stop}",
+            backgroundColorTarget: "{background_color_target}",
+            lastValueVisible: {str(price_label).lower()},
+            priceLineVisible: {str(price_line).lower()},
+            legendSymbol: "{legend_symbol}",
+            auto: {str(auto).lower()}
+        }});
+        """
+        try:
+            self.run_script(js_code)
+        except JavascriptException as e:
+            raise RuntimeError(f"Failed to create trade series. JS Error: {e}")
+
+    def set(self, df: Optional[pd.DataFrame] = None, format_cols: bool = True):
+        if df is None or df.empty:
+            self.run_script(f'''{self.id}.series.setData([])''')
+            self.data = pd.DataFrame()
+            return
+        if format_cols:
+            df = self._df_datetime_format(df, exclude_lowercase=self.name)
+        if not df.empty:
+           # if 'entry_price' not in df:
+           #     raise NameError(f'No column named "{'entry_price'}".')
+            df['value'] = df['entry']#.rename(columns={self.name: 'value'})
+        self.data = df.copy()
+        self._last_bar = df.iloc[-1]
+        self.run_script(f'''{self.id}.series.setData({js_data(df)}); ''')
+    def delete(self):
+        """
+        Irreversibly deletes the trade series.
+        """
+        self.run_script(f'''
+            {self.id}legendItem = {self._chart.id}.legend._lines.find((line) => line.series == {self.id}.series)
+            {self._chart.id}.legend._lines = {self._chart.id}.legend._lines.filter((item) => item != {self.id}legendItem)
+
+            if ({self.id}legendItem) {{
+                {self._chart.id}.legend.div.removeChild({self.id}legendItem.row)
+            }}
+
+            {self._chart.id}.chart.removeSeries({self.id}.series)
+            delete {self.id}legendItem
+            delete {self.id}
+        ''')
+    def initiate_trade(
+        self,
+        time: Optional[Any] = None,
+        entry: float = 0.0,
+        stop: Optional[float] = None,
+        target: Optional[float] = None,
+        action: str = "entry",
+        amount: float = 1.0,
+        display_info: str = "",
+    ) -> None:
+        """
+        Initiates or updates a trade on the PositionPlot by inserting one new data point
+        into the trade series. If `time` is not provided, this method attempts to fetch
+        the last bar's time from the base series in the trade series' options.
+        """
+        time_str = self._get_time_or_last_bar(time)
+
+        trade_point = {
+            "time": time_str,
+            "entry": entry,
+            "stop": stop if stop is not None else None,
+            "target": target if target is not None else None,
+            "action": action,
+            "amount": amount,
+            "displayInfo": display_info,
+        }
+
+        trade_json = js_data([trade_point])[1:-1]  # turn list -> single object
+        js_code = f"{self.id}.series.update({trade_json});"
+        self.run_script(js_code)
+    def close_trade(
+        self,
+        time: Optional[Any] = None,
+        display_info: str = "",
+    ) -> None:
+        """
+        Closes an existing trade on the PositionPlot by sending an update 
+        with action='close'. If `time` is not provided, we attempt to fetch 
+        the last bar's time from the base series in the trade series' options.
+
+        :param time: The time at which the trade is closed. 
+                    If None, fetch from the base series' latest bar or fallback to "now".
+        :param display_info: Optional text info to display on the chart regarding the close.
+        """
+        time_str = self._get_time_or_last_bar(time)
+
+        # 3) Build the trade point dictionary, with action='close'
+        trade_point = {
+            "time": time_str,
+            "action": "close",
+            "displayInfo": display_info,
+        }
+
+        # 4) Convert to JS object
+        trade_json = js_data([trade_point])[1:-1]  # remove the surrounding [ ]
+
+        # 5) Send the update to the trade series
+        js_code = f"{self.id}.series.update({trade_json});"
+        self.run_script(js_code)
+
+    def _get_time_or_last_bar(self, time: Optional[Any]) -> str:
+        """
+        Returns a JS-friendly time string:
+        - If `time` is provided, convert it.
+        - Otherwise, fetch the last bar's time from baseSeries or fallback to "now".
+        """
+        if time is not None:
+            return self._convert_time(time)
+
+        # No time -> fetch from base series
+        js_fetch_time = f"""
+        (function() {{
+            const baseSeries = {self.id}.series.options().baseSeries;
+            if (!baseSeries) return null;
+            const data = baseSeries.data();
+            if (!data || data.length === 0) return null;
+            return data[data.length - 1].time;
+        }})();
+        """
+        last_bar_time = self.run_script(js_fetch_time)
+        if last_bar_time is None:
+            # fallback to "now"
+            last_bar_time = pd.Timestamp.now().isoformat()
+
+        return self._convert_time(last_bar_time)
 
 
 
@@ -1084,7 +1117,7 @@ class AbstractChart(Candlestick, Pane):
         self._height = height
         self.events: Events = Events(self)
 
-        from lightweight_charts_.polygon import PolygonAPI
+        from lightweight_charts.polygon import PolygonAPI
         self.polygon: PolygonAPI = PolygonAPI(self)
 
         self.run_script(
@@ -1268,46 +1301,46 @@ class AbstractChart(Candlestick, Pane):
             price_scale_id=price_scale_id,
         )
         
-    #def plot_position(
-    #        self,
-    #        name: str = 'Position',
-    #        side: str = 'long',
-    #        mode: str = 'relative',
-    #        background_color_stop: str = 'rgba(255,0,0,0.2)',
-    #        background_color_target: str = 'rgba(0,255,0,0.2)',
-    #        price_line: bool = True,
-    #        price_label: bool = True,
-    #        group: str = 'Position',
-    #        legend_symbol: str = '$',
-    #        auto: bool = 'true'
-    #    ) -> 'PositionPlot':
-    #        """
-    #        Creates and returns a PositionPlot (Trade) object.
-#
-    #        :param name: Name of the trade series.
-    #        :param side: 'long' or 'short'.
-    #        :param mode: 'relative' or 'absolute'.
-    #        :param background_color_stop: Gradient color for entry-stop line.
-    #        :param background_color_target: Gradient color for entry-target line.
-    #        :param price_line: Show the price line.
-    #        :param price_label: Show the price label on the scale.
-    #        :param group: Legend group.
-    #        :param legend_symbol: Symbol for the legend.
-    #        """
-    #        self._lines.append(PositionPlot(
-    #            self,
-    #            name,
-    #            side,
-    #            mode,
-    #            background_color_stop,
-    #            background_color_target,
-    #            price_line,
-    #            price_label,
-    #            group,
-    #            legend_symbol,
-    #            auto
-    #        ))
-    #        return self._lines[-1]
+    def plot_position(
+            self,
+            name: str = 'Position',
+            side: str = 'long',
+            mode: str = 'relative',
+            background_color_stop: str = 'rgba(255,0,0,0.2)',
+            background_color_target: str = 'rgba(0,255,0,0.2)',
+            price_line: bool = True,
+            price_label: bool = True,
+            group: str = 'Position',
+            legend_symbol: str = '$',
+            auto: bool = 'true'
+        ) -> 'PositionPlot':
+            """
+            Creates and returns a PositionPlot (Trade) object.
+
+            :param name: Name of the trade series.
+            :param side: 'long' or 'short'.
+            :param mode: 'relative' or 'absolute'.
+            :param background_color_stop: Gradient color for entry-stop line.
+            :param background_color_target: Gradient color for entry-target line.
+            :param price_line: Show the price line.
+            :param price_label: Show the price label on the scale.
+            :param group: Legend group.
+            :param legend_symbol: Symbol for the legend.
+            """
+            self._lines.append(PositionPlot(
+                self,
+                name,
+                side,
+                mode,
+                background_color_stop,
+                background_color_target,
+                price_line,
+                price_label,
+                group,
+                legend_symbol,
+                auto
+            ))
+            return self._lines[-1]
 
 
     

@@ -11,14 +11,14 @@ import {
   IChartApi,
   ISeriesApi,
   ISeriesPrimitive,
-  ISeriesPrimitivePaneRenderer,
-  ISeriesPrimitivePaneView,
+  IPrimitivePaneRenderer,
+  IPrimitivePaneView,
   Logical,
   SeriesType,
   Time,
   LineStyle,
   LogicalRange,
-  SeriesPrimitivePaneViewZOrder,
+  PrimitivePaneViewZOrder,
 } from "lightweight-charts";
 
 import { Point as LogicalPoint } from "../drawing/data-source";
@@ -705,7 +705,7 @@ export class VolumeProfile
   /**
    * ISeriesPrimitive: returns your pane views
    */
-  public paneViews(): ISeriesPrimitivePaneView[] {
+  public paneViews(): IPrimitivePaneView[] {
     return this._paneViews;
   }
 
@@ -749,7 +749,7 @@ export class VolumeProfile
 /**
  * The VolumeProfilePaneView => transforms bins => screen coords, returns a renderer
  */
-class VolumeProfilePaneView implements ISeriesPrimitivePaneView {
+class VolumeProfilePaneView implements IPrimitivePaneView {
   private _source: VolumeProfile;
   private _x: Coordinate | null = null;
   private _width: number = 0;
@@ -843,7 +843,7 @@ class VolumeProfilePaneView implements ISeriesPrimitivePaneView {
     }
   }
 
-  public renderer(): ISeriesPrimitivePaneRenderer {
+  public renderer(): IPrimitivePaneRenderer {
     return new VolumeProfileRenderer(
       {
         x: this._x,
@@ -876,7 +876,7 @@ class VolumeProfilePaneView implements ISeriesPrimitivePaneView {
 }
 
   zOrder() {
-    return 'bottom' as SeriesPrimitivePaneViewZOrder;
+    return 'bottom' as PrimitivePaneViewZOrder;
 }
 
 }
@@ -886,7 +886,7 @@ class VolumeProfilePaneView implements ISeriesPrimitivePaneView {
  */
 export class VolumeProfileRenderer
   extends TwoPointDrawingPaneRenderer
-  implements ISeriesPrimitivePaneRenderer
+  implements IPrimitivePaneRenderer
 {
   private _data: VolumeProfileRendererData;
   private options: VolumeProfileOptions;

@@ -49,7 +49,7 @@ export function convertPoint(
   series?: ISeriesApi<SeriesType>
 ): LogicalPoint | CanvasPoint | null {
   const timeScale = chart.timeScale();
-  const targetSeries = series ?? chart.addLineSeries(); // Fallback to adding a new series if one wasn't provided
+  const targetSeries = series ?? chart.addSeries(LineSeries,); // Fallback to adding a new series if one wasn't provided
 
   if (!targetSeries) {
     console.warn('No series found. Cannot perform y-axis conversions.');

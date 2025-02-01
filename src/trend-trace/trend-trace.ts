@@ -6,11 +6,10 @@ import {
 import {
   ISeriesApi,
   ISeriesPrimitive,
-  ISeriesPrimitivePaneRenderer,
-  ISeriesPrimitivePaneView,
+  IPrimitivePaneRenderer,
+  IPrimitivePaneView,
   Time,
   Logical,
-  SeriesAttachedParameter,
   Point as CanvasPoint,
   MouseEventParams,
   Point,
@@ -23,6 +22,10 @@ import {
   LineSeriesOptions,
   LineStyle,
   SeriesType,
+  defaultHorzScaleBehavior,
+  PaneAttachedParameter,
+  SeriesAttachedParameter
+  
 } from "lightweight-charts";
 import { PluginBase } from "../plugin-base";
 import { setOpacity } from "../helpers/colors";
@@ -169,18 +172,28 @@ export class TrendTrace extends PluginBase implements ISeriesPrimitive<Time> {
          this.applyOptions(json.options)
     }
 
-  attached(params: SeriesAttachedParameter): SeriesAttachedParameter {
-    super.attached(params);
-    if (this._originalP1 && this._originalP2){
-    this._createSequence({p1:this._originalP1, p2:this._originalP2});}
-    this._source = ensureExtendedSeries(params.series, this._handler.legend);
-    this.title = params.series.options().title;
-    return {
-      chart: params.chart,
-      series: params.series,
-      requestUpdate: params.requestUpdate,
-    };
-  }
+
+    // ...existing code...
+    attached(params: SeriesAttachedParameter): SeriesAttachedParameter<Time> {
+        super.attached(params);
+        if (this._originalP1 && this._originalP2){
+            this._createSequence({p1:this._originalP1, p2:this._originalP2});
+        }
+        this._source = ensureExtendedSeries(params.series, this._handler.legend);
+        this.title = params.series.options().title;
+        
+        // Call the function to get the class and then instantiate it
+        const HorzScaleBehaviorClass = defaultHorzScaleBehavior();
+        const horzScaleBehaviorInstance = new HorzScaleBehaviorClass();
+    
+        return {
+            chart: params.chart,
+            series: params.series,
+            requestUpdate: params.requestUpdate,
+            horzScaleBehavior: horzScaleBehaviorInstance
+        };
+    }
+    // ...existing code...
 
   paneViews() {
     return this._paneViews;
@@ -610,7 +623,7 @@ export class TrendTrace extends PluginBase implements ISeriesPrimitive<Time> {
 /* ============================================================================
   TRENDTRACE PANE VIEW
 ============================================================================ */
-export class TrendTracePaneView implements ISeriesPrimitivePaneView {
+export class TrendTracePaneView implements IPrimitivePaneView {
   _p1: ViewPoint = { x: null, y: null };
   _p2: ViewPoint = { x: null, y: null };
   _plugin: TrendTrace;
@@ -633,7 +646,7 @@ export class TrendTracePaneView implements ISeriesPrimitivePaneView {
 
 export class TrendTracePaneRenderer
   extends TwoPointDrawingPaneRenderer
-  implements ISeriesPrimitivePaneRenderer
+  implements IPrimitivePaneRenderer
 {
   private _source: TrendTrace;
   public _options: SequenceOptions;
@@ -679,14 +692,14 @@ export class TrendTracePaneRenderer
           return;
         }
 
-        const firstX1 = data[0].x1 as Logical;
-        const lastX1 = data[data.length - 1].x1 as Logical;
-        const canvasX1 = chart.timeScale().logicalToCoordinate(firstX1) ?? 0;
+        const firstX = data[0].x1 as Logical;
+        const lastX = data[data.length - 1].x1 as Logical;
+        const canvasX1 = chart.timeScale().logicalToCoordinate(firstX) ?? 0;
         const canvasX2 =
-          chart.timeScale().logicalToCoordinate(lastX1) ?? canvasX1;
+          chart.timeScale().logicalToCoordinate(lastX) ?? canvasX1;
 
-        const _firstX1 = canvasX1 * horizontalPixelRatio;
-        const _lastX1 = canvasX2 * horizontalPixelRatio;
+        const _firstX = canvasX1 * horizontalPixelRatio;
+        const _lastX = canvasX2 * horizontalPixelRatio;
         const inverted =
           (this._source._sequence._originalP2.logical >
             this._source._sequence._originalP1.logical &&
@@ -699,16 +712,16 @@ export class TrendTracePaneRenderer
         const scaledBars = data
           .map((bar, index) => {
             const scaledX1 =
-              _firstX1 +
+              _firstX +
               (inverted ? 1 : -1) *
                 (index *
-                  ((_lastX1 - _firstX1) / data.length) *
+                  ((_lastX - _firstX) / data.length) *
                   this._source._sequence.spatial.scale.x);
             const scaledX2 =
-              _firstX1 +
+              _firstX +
               (inverted ? 1 : -1) *
                 ((index + 1) *
-                  ((_lastX1 - _firstX1) / data.length) *
+                  ((_lastX  - _firstX) / data.length) *
                   this._source._sequence.spatial.scale.x);
             const color = !bar.isUp
               ? inverted
@@ -764,7 +777,7 @@ export class TrendTracePaneRenderer
 
         if (this.isOHLCData(data)) {
           if (this._options.wickVisible) {
-            this._drawWicks(scope, scaledBars);
+            this._drawWicks(scope, scaledBars, barSpace);
           }
           this._drawCandles(scope, scaledBars, barSpace);
 
@@ -848,7 +861,7 @@ export class TrendTracePaneRenderer
       scaledX2: number;
       wickColor: string | undefined;
     })[]
-  ): void {
+  , barSpace:number): void {
     const { context: ctx, verticalPixelRatio } = scope;
     const inverted =
       (this._source._sequence._originalP2.price >
@@ -858,8 +871,12 @@ export class TrendTracePaneRenderer
         this._source._sequence._originalP1.price &&
         this._source._sequence.p2.price < this._source._sequence.p1.price);
     bars.forEach((bar) => {
-      const scaledX = bar.scaledX1 + (bar.scaledX2 + 1 - bar.scaledX1) / 2;
-      //const scaledHigh =
+      const candleWidth = barSpace ;
+      const candleBodyWidth = (this._options.barSpacing??0.8)*(bar.scaledX2 - bar.scaledX1);
+
+      const leftSide = bar.scaledX1 //-  Math.abs((( candleWidth) * ((this._options.barSpacing ?? 0.8)))/2);
+      const rightSide = leftSide + candleBodyWidth
+      const middle = (leftSide + rightSide) / 2;      //const scaledHigh =
       //  (this._source.series.priceToCoordinate( (inverted? bar.high??0:bar.low??0)) ?? 0) *
       //  verticalPixelRatio;
       //const scaledLow =
@@ -892,14 +909,14 @@ export class TrendTracePaneRenderer
 
       // Draw the top wick (high to max(open, close))
       ctx.beginPath();
-      ctx.moveTo(scaledX, scaledHigh);
-      ctx.lineTo(scaledX, topWick);
+      ctx.moveTo(middle, scaledHigh);
+      ctx.lineTo(middle, topWick);
       ctx.stroke();
 
       // Draw the bottom wick (min(open, close) to low)
       ctx.beginPath();
-      ctx.moveTo(scaledX, bottomWick);
-      ctx.lineTo(scaledX, scaledLow);
+      ctx.moveTo(middle, bottomWick);
+      ctx.lineTo(middle, scaledLow);
       ctx.stroke();
     });
   }
@@ -918,8 +935,8 @@ export class TrendTracePaneRenderer
     ctx.save();
 
     bars.forEach((bar) => {
-      const candleWidth = barSpace * horizontalPixelRatio;
-      const candleBodyWidth = bar.scaledX2 - bar.scaledX1 + candleWidth;
+      const candleWidth = barSpace ;
+      const candleBodyWidth = (this._options.barSpacing??0.8)*(bar.scaledX2 - bar.scaledX1);
 
       if (!bar) {
         return;
@@ -942,13 +959,10 @@ export class TrendTracePaneRenderer
       const barVerticalMin = Math.max(scaledOpen, scaledClose);
       const barVerticalSpan = barVerticalMax - barVerticalMin;
       const barY = (barVerticalMax + barVerticalMin) / 2;
-
-      const leftSide =
-        bar.scaledX1 - (1 - candleWidth * (this._options.barSpacing ?? 0.8));
-      const rightSide =
-        bar.scaledX2 + (1 - candleWidth * (this._options.barSpacing ?? 0.8));
-      const middle = (leftSide + rightSide) / 2;
-
+      const leftSide = bar.scaledX1 //-  Math.abs((( candleWidth) * ((this._options.barSpacing ?? 0.8)))/2);
+      const rightSide = leftSide + candleBodyWidth// this._options.chandelierSize??1  > 1? 
+      //leftSide +   (candleWidth*(this._options.chandelierSize??1 )) - Math.abs((((this._options.barSpacing ?? 0.8))*(candleWidth)))  : leftSide +  Math.abs(1-((this._options.barSpacing??0.8 * candleWidth)/2));
+      const middle = (leftSide + rightSide) / 2;      //const scaledHigh =
       ctx.fillStyle = this._options.visible
         ? bar.color ?? "#ffffff"
         : "rgba(0,0,0,0)";
@@ -976,22 +990,6 @@ export class TrendTracePaneRenderer
       break;
     case CandleShape.Arrow:
       ohlcArrow(ctx, leftSide, rightSide, middle, barY, barVerticalSpan, scaledHigh, scaledLow, isUp);
-      break;
-    case CandleShape.Cube:
-      ohlc3d(
-        ctx,
-        bar.scaledX1,
-        scaledHigh,
-        scaledLow,
-        scaledOpen,
-        scaledClose,
-        candleBodyWidth,
-        candleBodyWidth,
-        ctx.fillStyle,
-        ctx.strokeStyle,
-        isUp,
-        barSpace
-      );
       break;
     case CandleShape.Polygon:
       ohlcPolygon(ctx, leftSide, rightSide, barY, barVerticalSpan, scaledHigh, scaledLow, isUp);

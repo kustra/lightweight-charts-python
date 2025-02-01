@@ -250,7 +250,7 @@ class VerticalSpan(Pane):
         super().__init__(self._chart.win)
         start_time, end_time = pd.to_datetime(start_time), pd.to_datetime(end_time)
         self.run_script(f'''
-        {self.id} = {self._chart.id}.chart.addHistogramSeries({{
+        {self.id} = {self._chart.id}.chart.addSeries(HistogramSeries,{{
                 color: '{color}',
                 priceFormat: {{type: 'volume'}},
                 priceScaleId: 'vertical_line',
