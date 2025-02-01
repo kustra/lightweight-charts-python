@@ -82,7 +82,7 @@ import { defaultSequenceOptions, DataPoint } from "../trend-trace/sequence";
 import { PluginBase } from "../plugin-base";
 
 import { generateShades, setOpacity } from "../helpers/colors";
-import { ALL_INDICATORS, IndicatorDefinition } from "../indicators/indicators";
+import { INDICATORS, IndicatorDefinition } from "../indicators/indicators";
 
 // ----------------------------------
 // If you have actual code referencing commented-out or removed imports,
@@ -1121,6 +1121,79 @@ export class ContextMenu {
         console.log(`Updated title to: ${newValue}`);
       }
     );
+
+      // Retrieve current pane index of the series and the array of existing panes.
+      const currentPaneIndex = series.getPane().paneIndex();
+      const panes = this.handler.chart.panes();
+
+      // Determine the current value (label) for the hybrid input.
+      const currentValue = `Pane ${currentPaneIndex}`;
+
+      // Define the default action:
+      // If the series is in the main pane (pane 0), move it to the next existing pane (if available)
+      // or create a new pane if there isn’t one.
+      // Otherwise (if the series is on any other pane), move it back to the main pane (pane 0).
+      const defaultAction = () => {
+        if (currentPaneIndex === 0) {
+          if (panes.length > 1) {
+            series.moveToPane(1);
+            console.log(`Default: Moved series from pane ${currentPaneIndex} to pane 1.`);
+          } else {
+            series.moveToPane(panes.length); // creates a new pane
+            console.log(`Default: Moved series from pane ${currentPaneIndex} to a new pane at index ${panes.length}.`);
+          }
+        } else {
+          series.moveToPane(0);
+          console.log(`Default: Moved series from pane ${currentPaneIndex} back to main pane (0).`);
+        }
+      };
+
+      // Build the list of options:
+      // For each existing pane, add an option labeled "Pane 0", "Pane 1", etc.
+      // Then add an extra option for a "New Pane".
+      const options: { name: string; action: () => void }[] = [];
+      for (let i = 0; i < panes.length; i++) {
+        options.push({
+          name: `Pane ${i}`,
+          action: () => {
+            series.moveToPane(i);
+            console.log(`Moved series to existing pane ${i}.`);
+          }
+        });
+      }
+      options.push({
+        name: "New Pane",
+        action: () => {
+          series.moveToPane(panes.length);
+          console.log(`Moved series to a new pane at index ${panes.length}.`);
+        }
+      });
+
+      // Create the hybrid input using your addMenuInput helper.
+      // This will render a dropdown that shows all options and executes the corresponding action on change.
+      this.addMenuInput(this.div, {
+        type: "hybrid",
+        label: "Move series to pane",
+        sublabel: currentValue,
+        value: currentValue,
+        onChange: (newValue: string) => {
+          // When the user selects an option, look it up in the options array and execute its action.
+          const selectedOption = options.find(opt => opt.name === newValue);
+          if (selectedOption) {
+            selectedOption.action();
+          }
+        },
+        hybridConfig: {
+          defaultAction: defaultAction,
+          options: options.map(opt => ({
+            name: opt.name,
+            action: opt.action
+          }))
+        }
+      });
+
+
+
     // Inside populateSeriesMenu (already in your code above)
     this.addMenuItem(
       "Clone Series ▸",
@@ -1330,7 +1403,7 @@ export class ContextMenu {
     this.addMenuItem(
       `Configure ${indicatorSeries.indicator.name}`,
       () => {
-        this.configureIndicatorParams(indicatorSeries,event);
+        this.configureIndicatorParams(indicatorSeries,event,indicatorSeries.figureCount);
       },
       false
     );
@@ -3718,16 +3791,16 @@ private showNotification(message: string, type: "success" | "error"): void {
     this.div.innerHTML = "";
   
     // Show each indicator
-    ALL_INDICATORS.forEach((indicator) => {
+    INDICATORS.forEach((indicator) => {
       this.addMenuItem(
         `${indicator.name} (${indicator.shortName})`,
         () => {
           // If indicator has paramMap, let user configure
           if (indicator.paramMap) {
-            this.configureIndicatorParams({series, indicator}, event);
+            this.configureIndicatorParams({series, indicator}, event,1,true);
           } else {
             // Otherwise, directly apply
-            this.applyIndicator(series, indicator, /* no overrides */ {});
+            this.applyIndicator(series, indicator, /* no overrides */ {},1);
           }
         },
         false
@@ -3743,116 +3816,251 @@ private showNotification(message: string, type: "success" | "error"): void {
     // Display
     this.showMenu(event);
   }
-  
+
+
   private configureIndicatorParams(
-    indicatorInput: { series: ISeriesApi<"Candlestick" | "Bar">, indicator: IndicatorDefinition } | ISeriesIndicator,
-    event: MouseEvent
+    indicatorInput:
+      | { series: ISeriesApi<"Candlestick" | "Bar">; indicator: IndicatorDefinition }
+      | ISeriesIndicator,
+    event: MouseEvent,
+    globalCountParam?: number,
+    init: boolean = false  // <-- New optional parameter for global figure count
   ) {
     // Clear existing menu items
     this.div.innerHTML = "";
+    let currentCount: number;
+
+    // Extract the series and indicator from the input.
+    const series =
+      "sourceSeries" in indicatorInput
+        ? indicatorInput
+        : (indicatorInput.series as ISeriesApi<"Candlestick" | "Bar">);
+    const indicator = ("indicator" in indicatorInput
+      ? indicatorInput.indicator
+      : (indicatorInput as ISeriesIndicator).indicator) as IndicatorDefinition;
   
-    // Extract the series and indicator from the input
-    const series = "sourceSeries" in indicatorInput ? indicatorInput : (indicatorInput.series as ISeriesApi<"Candlestick"|"Bar">);
-    const indicator = ("indicator" in indicatorInput ? indicatorInput.indicator : (indicatorInput as ISeriesIndicator).indicator) as IndicatorDefinition;
-  
-    // We'll store user overrides in a simple record
+    // Use stored parameters if available; otherwise, use indicator defaults.
+    const storedParams = "paramMap" in indicatorInput ? indicatorInput.paramMap : {};
     const overrides: Record<string, any> = {};
   
-    // For each param in indicator.paramMap, create a row
-    Object.entries(indicator.paramMap).forEach(([paramName, paramSpec]) => {
-      const labelText = paramName; // or e.g. camelToTitle(paramName)
-      const defaultVal = paramSpec.defaultValue;  // numeric default
-  
-      // choose your input type
-      // e.g. paramSpec.type could be "number", "boolean", "select", etc.
-      if (paramSpec.type === "number") {
-        this.addNumberInput(
-          labelText,
-          defaultVal,
-          (newVal) => {
-            overrides[paramName] = newVal;
-          },
-          paramSpec.min, 
-          paramSpec.max, 
-          paramSpec.step
-        );
-        // also set an initial value
-        overrides[paramName] = defaultVal;
-      }
-      else if (paramSpec.type === "boolean") {
-        this.addCheckbox(
-          labelText,
-          Boolean(defaultVal),
-          (checked) => {
-            overrides[paramName] = checked;
-          }
-        );
-        overrides[paramName] = defaultVal;
-      }
-      else if (paramSpec.type === "select") {
-        // Suppose paramSpec.options is an array of strings
-        this.addSelectInput(
-          labelText,
-          String(defaultVal),
-          paramSpec.options || [],
-          (selected) => {
-            overrides[paramName] = selected;
-          }
-        );
-        overrides[paramName] = defaultVal;
-      }
-      // etc. if paramSpec.type === "color", "string", ...
-      else {
-        // fallback to text input or something
-        this.addMenuInput(this.div, {
-          type: "string",
-          label: labelText,
-          value: defaultVal,
-          onChange: (val) => {
-            overrides[paramName] = val;
-          },
-        });
-        overrides[paramName] = defaultVal;
+    /**************************************************
+     * 1. Global Figure Count Input
+     * If any parameter is an array type, add a top-level input for
+     * "Number of Figures". Use the passed globalCountParam if provided,
+     * otherwise default to indicatorInput.figureCount if it exists,
+     * or else to the default count (derived from the param defaults).
+     **************************************************/
+    let hasArrayParams = false;
+    let defaultCount = 0;
+    Object.entries(indicator.paramMap).forEach(([_, paramSpec]) => {
+      if (
+        paramSpec.type === "numberArray" ||
+        paramSpec.type === "selectArray" ||
+        paramSpec.type === "booleanArray" ||
+        paramSpec.type === "stringArray"
+      ) {
+        hasArrayParams = true;
+        const defArr = Array.isArray(paramSpec.defaultValue)
+          ? paramSpec.defaultValue
+          : [paramSpec.defaultValue];
+        defaultCount = Math.max(defaultCount, defArr.length);
       }
     });
-    // "Apply" button
+    if (hasArrayParams && init) {
+      // Determine the current global count:
+      if (globalCountParam !== undefined) {
+        currentCount = globalCountParam;
+        (indicatorInput as ISeriesIndicator).figureCount = globalCountParam;
+      } else if (
+        "figureCount" in indicatorInput &&
+        (indicatorInput as ISeriesIndicator).figureCount !== undefined
+      ) {
+        currentCount = (indicatorInput as ISeriesIndicator).figureCount;
+      } else {
+        currentCount = defaultCount || 1;
+      }
+      // Add a top-level input for "Number of Figures"
+      this.addNumberInput(
+        "Number of Figures",
+        currentCount,
+        (newCount: number) => {
+          // Update the indicator's property with the new count.
+
+          (indicatorInput as ISeriesIndicator).figureCount = newCount
+          // Redraw the parameter menu using the new global count.
+          this.configureIndicatorParams(indicatorInput, event, newCount,true);
+        },
+        1,
+        10,
+        1
+      );
+    }
+    
+  
+    /**************************************************
+     * 2. Process Each Parameter
+     **************************************************/
+    Object.entries(indicator.paramMap).forEach(([paramName, paramSpec]) => {
+      const labelText = paramName; // Optionally, format the label.
+      const defaultVal =
+        storedParams[paramName] !== undefined ? storedParams[paramName] : paramSpec.defaultValue;
+  
+      if (
+        paramSpec.type === "numberArray" ||
+        paramSpec.type === "selectArray" ||
+        paramSpec.type === "booleanArray" ||
+        paramSpec.type === "stringArray"
+      ) {
+        // Get the global count from the indicator's property.
+        const count: number = globalCountParam??(indicatorInput as ISeriesIndicator).figureCount
+
+        // Determine base type by stripping "Array"
+        const baseType = paramSpec.type.replace("Array", "");
+        overrides[paramName] = [];
+        for (let i = 0; i < count; i++) {
+          let itemDefault: any;
+          if (Array.isArray(defaultVal)) {
+            itemDefault = i < defaultVal.length ? defaultVal[i] : defaultVal[defaultVal.length - 1];
+          } else {
+            itemDefault = defaultVal;
+          }
+          if (baseType === "number") {
+            this.addNumberInput(
+              `${labelText} ${i + 1}`,
+              itemDefault,
+              (newVal: number) => {
+                if (!overrides[paramName]) {
+                  overrides[paramName] = [];
+                }
+                overrides[paramName][i] = newVal;
+              },
+              paramSpec.min,
+              paramSpec.max,
+              paramSpec.step
+            );
+          } else if (baseType === "boolean") {
+            this.addCheckbox(
+              `${labelText} ${i + 1}`,
+              Boolean(itemDefault),
+              (checked: boolean) => {
+                if (!overrides[paramName]) {
+                  overrides[paramName] = [];
+                }
+                overrides[paramName][i] = checked;
+              }
+            );
+          } else if (baseType === "select") {
+            this.addSelectInput(
+              `${labelText} ${i + 1}`,
+              String(itemDefault),
+              paramSpec.options || [],
+              (selected: string) => {
+                if (!overrides[paramName]) {
+                  overrides[paramName] = [];
+                }
+                overrides[paramName][i] = selected;
+              }
+            );
+          } else if (baseType === "string") {
+            this.addMenuInput(this.div, {
+              type: "string",
+              label: `${labelText} ${i + 1}`,
+              value: itemDefault,
+              onChange: (val: string) => {
+                if (!overrides[paramName]) {
+                  overrides[paramName] = [];
+                }
+                overrides[paramName][i] = val;
+              },
+            });
+          }
+          if (!overrides[paramName]) {
+            overrides[paramName] = [];
+          }
+          overrides[paramName][i] = itemDefault;
+        }
+      } else {
+        // Non-array parameters: same as before.
+        if (paramSpec.type === "number") {
+          this.addNumberInput(
+            labelText,
+            defaultVal,
+            (newVal: number) => {
+              overrides[paramName] = newVal;
+            },
+            paramSpec.min,
+            paramSpec.max,
+            paramSpec.step
+          );
+          overrides[paramName] = defaultVal;
+        } else if (paramSpec.type === "boolean") {
+          this.addCheckbox(
+            labelText,
+            Boolean(defaultVal),
+            (checked: boolean) => {
+              overrides[paramName] = checked;
+            }
+          );
+          overrides[paramName] = defaultVal;
+        } else if (paramSpec.type === "select") {
+          this.addSelectInput(
+            labelText,
+            String(defaultVal),
+            paramSpec.options || [],
+            (selected: string) => {
+              overrides[paramName] = selected;
+            }
+          );
+          overrides[paramName] = defaultVal;
+        } else {
+          this.addMenuInput(this.div, {
+            type: "string",
+            label: labelText,
+            value: defaultVal,
+            onChange: (val: string) => {
+              overrides[paramName] = val;
+            },
+          });
+          overrides[paramName] = defaultVal;
+        }
+      }
+    });
+  
+    /**************************************************
+     * 3. Apply and Cancel Buttons
+     **************************************************/
     this.addMenuItem(
       "Apply",
       () => {
         this.hideMenu();
 
-        // If an existing indicator was passed, call its recalculate function
+        // Update the defaultValue for each parameter in the indicator's paramMap
+        Object.entries(overrides).forEach(([paramName, newValue]) => {
+          if (indicator.paramMap[paramName]) {
+            indicator.paramMap[paramName].defaultValue = newValue;
+          }
+        });
         if ("recalculate" in indicatorInput) {
-
-          indicatorInput.recalculate(overrides);
-
-          // 🔄 Update legend for each figure in the indicator
-          indicatorInput.figures.forEach((figSeries, key) => {
-
-            
+          (indicatorInput as ISeriesIndicator).recalculate(overrides);
+          (indicatorInput as ISeriesIndicator).figures.forEach((figSeries) => {
             const legendItem = this.handler.legend._lines.find(
               (item) => item.series === figSeries
             );
-
             if (legendItem) {
-
-      
-              this.handler.seriesMap.set( figSeries.options().title, series as ISeriesApiExtended);
+              this.handler.seriesMap.set(
+                figSeries.options().title,
+                series as ISeriesApiExtended
+              );
               legendItem.name = figSeries.options().title;
-              
-
             }
           });
-        } 
-        // Otherwise, apply a new indicator with the modified params
-        else {
-          this.applyIndicator(series, indicator, overrides);
+        } else {
+          this.applyIndicator(series, indicator, overrides,currentCount);
         }
       },
       false
     );
-
-    // "Cancel" button
+  
     this.addMenuItem(
       "Cancel",
       () => {
@@ -3860,13 +4068,13 @@ private showNotification(message: string, type: "success" | "error"): void {
       },
       false
     );
-
-    // Show updated menu
+  
     this.showMenu(event);
   }
   
+  
 
-  private applyIndicator(series: ISeriesApi<"Candlestick"|"Bar">| ISeriesIndicator, ind: IndicatorDefinition, overrides: Record<string, any>) {
+  private applyIndicator(series: ISeriesApi<"Candlestick"|"Bar">| ISeriesIndicator, ind: IndicatorDefinition, overrides: Record<string, any>, count:number) {
     // 1) Grab your main data
     const data = [...series.data()];
     if (!data) {
@@ -3937,7 +4145,8 @@ private showNotification(message: string, type: "success" | "error"): void {
           seriesInstance,
           series, // The original candlestick/bar series
           ind,
-          newMap, // Store all related figures
+          newMap, 
+          count,
           overrides, // Store parameter overrides for recalculation
           recalculateIndicator
         );

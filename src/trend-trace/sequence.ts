@@ -104,7 +104,7 @@ export const defaultSequenceOptions: SequenceOptions = {
     radius: 100,
     shape: 'Rounded' as CandleShape,
     chandelierSize: 1,
-    barSpacing: 0.8,
+    barSpacing: 0.7,
     lineStyle: 0,
     lineColor: '#ffffff',
     width: 1,
@@ -413,7 +413,7 @@ export class Sequence {
                     low: lowPrice,
                     isUp,
                     x1: barX,
-                    x2: barX + this._barWidth,
+                    x2: barX,
                     isInProgress: false,
                     originalData: {...orig, x1: index},
                     barSpacing: this._barWidth,
@@ -433,7 +433,7 @@ export class Sequence {
                     value: valuePrice,
                     isUp: undefined,
                     x1: barX,
-                    x2: barX + this._barWidth,
+                    x2: barX,
                     isInProgress: false,
                     originalData: orig,
                     barSpacing: this._options.barSpacing ?? 0.8
@@ -469,9 +469,7 @@ export class Sequence {
             throw new Error('Bucket cannot be empty in _chandelier method.');
         }
         const aggregatedx1 = bucket[0].x1;
-        const aggregatedx2 = isInProgress
-            ? aggregatedx1 + bucket.length
-            : aggregatedx1 + chandelierSize;
+        const aggregatedx2 = bucket[bucket.length -1].x2 ;
 
         // If it's an OHLC bucket:
         if (bucket[0].originalData?.open !== undefined) {

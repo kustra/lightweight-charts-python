@@ -45,6 +45,7 @@ class PyWV:
                 width, height = active_screen.width, active_screen.height
             else:
                 width, height = screen.width, screen.height
+        webview.settings['ALLOW_DOWNLOADS'] = True
 
         self.windows.append(webview.create_window(
             title,

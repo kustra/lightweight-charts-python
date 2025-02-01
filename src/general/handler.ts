@@ -1,9 +1,14 @@
 import {
+    AreaSeries,
+    BarSeries,
+    CandlestickSeries,
     ColorType,
     CrosshairMode,
+    HistogramSeries,
     IChartApi,
     ISeriesApi,
     ISeriesPrimitive,
+    LineSeries,
     LogicalRange,
     LogicalRangeChangeEventHandler,
     MouseEventHandler,
@@ -11,9 +16,9 @@ import {
     SeriesType,
     Time,
     createChart,
-
-
+    createSeriesMarkers 
 } from "lightweight-charts";
+import * as lightweight_charts from "lightweight-charts";
 import { FillArea } from "../fill-area/fill-area";
 import { GlobalParams, globalParamInit, LegendItem, LegendPrimitive, LegendSeries } from "./global-params";
 import { Legend } from "./legend";
@@ -220,7 +225,7 @@ export class Handler {
         const title = "OHLC" 
         const up = "rgba(39, 157, 130, 100)";
         const down = "rgba(200, 97, 100, 100)";
-        const candleSeries = this.chart.addCandlestickSeries({
+        const candleSeries = this.chart.addSeries(lightweight_charts.CandlestickSeries,{
             upColor: up,
             borderUpColor: up,
             wickUpColor: up,
@@ -253,7 +258,7 @@ export class Handler {
     }
 
     createVolumeSeries() {
-        const volumeSeries = this.chart.addHistogramSeries({
+        const volumeSeries = this.chart.addSeries(HistogramSeries,{
             color: "#26a69a",
             priceFormat: { type: "volume" },
             priceScaleId: "volume_scale",
@@ -291,7 +296,7 @@ export class Handler {
             })();
             
         const { group, legendSymbol = symbol, ...lineOptions } = options;
-        const line = this.chart.addLineSeries(lineOptions);
+        const line = this.chart.addSeries(LineSeries,lineOptions);
 
         const decorated = decorateSeries(line, this.legend);
         decorated.applyOptions({ title: name });
@@ -322,7 +327,7 @@ export class Handler {
         options: HistogramSeriesOptions
     ): { name: string; series: ISeriesApi<SeriesType> } {
         const { group, legendSymbol = "▨", ...histogramOptions } = options;
-        const histogram = this.chart.addHistogramSeries(histogramOptions);
+        const histogram = this.chart.addSeries(HistogramSeries,histogramOptions);
 
         // Decorate the series (if your implementation decorates series)
         const decorated = decorateSeries(histogram, this.legend);
@@ -358,7 +363,7 @@ export class Handler {
         options: AreaSeriesOptions
     ): { name: string; series: ISeriesApi<SeriesType> } {
         const { group, legendSymbol = "▨", ...areaOptions } = options;
-        const area = this.chart.addAreaSeries(areaOptions);
+        const area = this.chart.addSeries(AreaSeries,areaOptions);
 
         const decorated = decorateSeries(area, this.legend);
 
@@ -391,7 +396,7 @@ export class Handler {
         options: BarSeriesOptions
     ): { name: string; series: ISeriesApi<SeriesType> } {
         const { group, legendSymbol = ['┌', '└'], ...barOptions } = options;
-        const bar = this.chart.addBarSeries(barOptions);
+        const bar = this.chart.addSeries(BarSeries,barOptions);
 
         const decorated = decorateSeries(bar, this.legend);
         decorated.applyOptions({ title: name });

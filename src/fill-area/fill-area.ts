@@ -1,5 +1,5 @@
 import { CanvasRenderingTarget2D } from "fancy-canvas";
-import { ISeriesPrimitivePaneRenderer, Coordinate, ISeriesPrimitivePaneView, Time, ISeriesPrimitive, SeriesAttachedParameter, DataChangedScope, SeriesDataItemTypeMap, SeriesType, Logical, AutoscaleInfo, BarData, LineData, ISeriesApi, SeriesPrimitivePaneViewZOrder } from "lightweight-charts";
+import { IPrimitivePaneRenderer, Coordinate, IPrimitivePaneView, Time, ISeriesPrimitive, SeriesAttachedParameter, DataChangedScope, SeriesDataItemTypeMap, SeriesType, Logical, AutoscaleInfo, BarData, LineData, ISeriesApi, PrimitivePaneViewZOrder } from "lightweight-charts";
 import { PluginBase } from "../plugin-base";
 import { setOpacity } from "../helpers/colors";
 import { ClosestTimeIndexFinder } from '../helpers/closest-index';
@@ -172,7 +172,7 @@ export class FillArea extends PluginBase implements ISeriesPrimitive<Time> {
         };
     }
 }
-class FillAreaPaneRenderer implements ISeriesPrimitivePaneRenderer {
+class FillAreaPaneRenderer implements IPrimitivePaneRenderer {
     _viewData: BandViewData;
     _options: FillAreaOptions;
 
@@ -240,7 +240,7 @@ class FillAreaPaneRenderer implements ISeriesPrimitivePaneRenderer {
     }
 }
 
-class FillAreaPaneView implements ISeriesPrimitivePaneView {
+class FillAreaPaneView implements IPrimitivePaneView {
     _source: FillArea;
     _data: BandViewData;
 
@@ -270,7 +270,7 @@ class FillAreaPaneView implements ISeriesPrimitivePaneView {
         return new FillAreaPaneRenderer(this._data);
     }
     zOrder() {
-        return 'bottom' as SeriesPrimitivePaneViewZOrder;
+        return 'bottom' as PrimitivePaneViewZOrder;
     }
 }
 
