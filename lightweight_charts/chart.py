@@ -60,7 +60,8 @@ class PyWV:
         )
 
         self.windows[-1].events.loaded += lambda: self.loaded_event.set()
-
+        self.windows[-1].events.resized += lambda width, height: self.emit_queue.put(f'webview_resized_~_{width};;;{height}')
+        self.windows[-1].events.moved += lambda x, y: self.emit_queue.put(f'webview_moved_~_{x};;;{y}')
 
     def loop(self):
         # self.loaded_event.set()
