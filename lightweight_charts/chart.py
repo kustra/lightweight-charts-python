@@ -149,7 +149,6 @@ class WebviewHandler():
 
 class Chart(abstract.AbstractChart):
     _main_window_handlers = None
-    WV: WebviewHandler = WebviewHandler()
 
     def __init__(
         self,
@@ -168,17 +167,17 @@ class Chart(abstract.AbstractChart):
         scale_candles_only: bool = False,
         position: FLOAT = 'left'
     ):
-        Chart.WV.debug = debug
-        self._i = Chart.WV.create_window(
+        self.wv: WebviewHandler = WebviewHandler()
+        self.wv.debug = debug
+        self._i = self.wv.create_window(
                     width, height, x, y, screen, on_top, maximize, title
                 )
-
         window = abstract.Window(
-                    script_func=lambda s: Chart.WV.evaluate_js(self._i, s),
+                    script_func=lambda s: self.wv.evaluate_js(self._i, s),
                     js_api_code='pywebview.api.callback'
                 )
 
-        abstract.Window._return_q = Chart.WV.return_queue
+        window._return_q = self.wv.return_queue
 
         self.is_alive = True
 
@@ -195,10 +194,10 @@ class Chart(abstract.AbstractChart):
         :param block: blocks execution until the chart is closed.
         """
         if not self.win.loaded:
-            Chart.WV.start()
+            self.wv.start()
             self.win.on_js_load()
         else:
-            Chart.WV.show(self._i)
+            self.wv.show(self._i)
         if block:
             asyncio.run(self.show_async())
 
@@ -208,13 +207,13 @@ class Chart(abstract.AbstractChart):
             from lightweight_charts import polygon
             [asyncio.create_task(self.polygon.async_set(*args)) for args in polygon._set_on_load]
             while 1:
-                while Chart.WV.emit_queue.empty() and self.is_alive:
+                while self.wv.emit_queue.empty() and self.is_alive:
                     await asyncio.sleep(0.05)
                 if not self.is_alive:
                     return
-                response = Chart.WV.emit_queue.get()
+                response = self.wv.emit_queue.get()
                 if response == 'exit':
-                    Chart.WV.exit()
+                    self.wv.exit()
                     self.is_alive = False
                     return
                 else:
@@ -227,11 +226,11 @@ class Chart(abstract.AbstractChart):
         """
         Hides the chart window.\n
         """
-        self._q.put((self._i, 'hide'))
+        self.wv.function_call_queue.put((self._i, 'hide'))
 
     def exit(self):
         """
         Exits and destroys the chart window.\n
         """
-        Chart.WV.exit()
+        self.wv.exit()
         self.is_alive = False
